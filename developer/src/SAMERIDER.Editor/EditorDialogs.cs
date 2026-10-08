@@ -10,12 +10,12 @@ using SkiaSharp;
 using SAMERIDER.Core.Models;
 using SAMERIDER.Core.Services;
 
-namespace SAMERIDER.App;
+namespace SAMERIDER.Editor;
 
 internal static class Dialogs
 {
     public static async Task<(int ColorCount, bool SelectedOnly)?> PickPngExportSettingsAsync(
-        Window owner,
+        Control owner,
         SKBitmap source,
         int cellWidth,
         int cellHeight,
@@ -23,7 +23,7 @@ internal static class Dialogs
         bool initialSelectedOnly)
     {
         int[] colorOptions = [4, 8, 16, 32, 64, 128, 256, 0];
-        var window = new Window
+        var window = new EditorDialogWindow
         {
             Title = "PNG書き出し設定",
             Width = 720,
@@ -210,9 +210,9 @@ internal static class Dialogs
         return accepted ? selectedSettings : null;
     }
 
-    public static async Task<Color?> PickFillColorAsync(Window owner)
+    public static async Task<Color?> PickFillColorAsync(Control owner)
     {
-        var window = new Window
+        var window = new EditorDialogWindow
         {
             Title = "セルを塗り潰す",
             Width = 440,
@@ -326,9 +326,9 @@ internal static class Dialogs
         return await window.ShowDialog<bool>(owner) ? selectedColor : null;
     }
 
-    public static async Task<bool> ConfirmAsync(Window owner, string title, string message, string yes = "続行", string no = "キャンセル")
+    public static async Task<bool> ConfirmAsync(Control owner, string title, string message, string yes = "続行", string no = "キャンセル")
     {
-        var window = new Window { Title = title, Width = 440, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        var window = new EditorDialogWindow { Title = title, Width = 440, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
         var body = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(18), MaxWidth = 390 };
         var yesButton = CenteredButton(yes, 120, isDefault: true);
         var noButton = CenteredButton(no, 100, isCancel: true);
@@ -340,9 +340,9 @@ internal static class Dialogs
         return await window.ShowDialog<bool>(owner);
     }
 
-    public static async Task<bool?> UnsavedAsync(Window owner, string title, string message)
+    public static async Task<bool?> UnsavedAsync(Control owner, string title, string message)
     {
-        var window = new Window { Title = title, Width = 460, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        var window = new EditorDialogWindow { Title = title, Width = 460, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
         var body = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(18), MaxWidth = 410 };
         var save = CenteredButton("保存して終了", 120, isDefault: true);
         var discard = CenteredButton("保存しないで終了", 140);
@@ -357,10 +357,10 @@ internal static class Dialogs
     }
 
     public static async Task<(ResizeAnchor Anchor, int CellWidth, int CellHeight)?> PickResizeSettingsAsync(
-        Window owner, Bitmap sampleImage, int currentCellWidth, int currentCellHeight, int initialCellWidth, int initialCellHeight,
+        Control owner, Bitmap sampleImage, int currentCellWidth, int currentCellHeight, int initialCellWidth, int initialCellHeight,
         int columns, int rows, ResizeAnchor initialAnchor, Func<CancellationToken, Task<SAMERIDER.Core.Models.PixelRect?>> findCommonOpaqueBoundsAsync)
     {
-        var window = new Window { Title = "セルサイズの変更", Width = 560, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        var window = new EditorDialogWindow { Title = "セルサイズの変更", Width = 560, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
         var widthInput = new TextBox { Text = initialCellWidth.ToString(), Width = 76, HorizontalContentAlignment = HorizontalAlignment.Center };
         var heightInput = new TextBox { Text = initialCellHeight.ToString(), Width = 76, HorizontalContentAlignment = HorizontalAlignment.Center };
         var trimTransparentCheckBox = new CheckBox
@@ -734,9 +734,9 @@ internal static class Dialogs
     }
 
     public static async Task<(int CellWidth, int CellHeight, int Columns, int Rows)?> PickInitialCellSizeAsync(
-        Window owner, int imageWidth, int imageHeight, Bitmap sampleImage)
+        Control owner, int imageWidth, int imageHeight, Bitmap sampleImage)
     {
-        var window = new Window { Title = "画像からセルサイズを設定", Width = 390, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        var window = new EditorDialogWindow { Title = "画像からセルサイズを設定", Width = 390, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
         var divisor = GreatestCommonDivisor(imageWidth, imageHeight);
         var initialColumns = Math.Max(1, imageWidth / divisor);
         var initialRows = Math.Max(1, imageHeight / divisor);
@@ -836,10 +836,10 @@ internal static class Dialogs
     }
 
     public static async Task<(int CellWidth, int CellHeight, int Columns, int Rows)?> PickTrimmedImportCellSizeAsync(
-        Window owner, int imageWidth, int imageHeight, int initialCellWidth, int initialCellHeight, Bitmap sampleImage,
+        Control owner, int imageWidth, int imageHeight, int initialCellWidth, int initialCellHeight, Bitmap sampleImage,
         bool allowCellSizeChange = true)
     {
-        var window = new Window { Title = "画像のセルサイズを指定", Width = 600, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        var window = new EditorDialogWindow { Title = "画像のセルサイズを指定", Width = 600, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
         var cellWidth = new TextBox { Text = initialCellWidth.ToString(), Width = 72, HorizontalContentAlignment = HorizontalAlignment.Center };
         var cellHeight = new TextBox { Text = initialCellHeight.ToString(), Width = 72, HorizontalContentAlignment = HorizontalAlignment.Center };
         if (!allowCellSizeChange)
@@ -938,9 +938,9 @@ internal static class Dialogs
         return accepted ? selected : null;
     }
 
-    public static async Task ShowErrorAsync(Window owner, string message)
+    public static async Task ShowErrorAsync(Control owner, string message)
     {
-        var window = new Window { Title = "エラー", Width = 480, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        var window = new EditorDialogWindow { Title = "エラー", Width = 480, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
         var close = CenteredButton("閉じる", 90, isDefault: true, isCancel: true);
         close.HorizontalAlignment = HorizontalAlignment.Center; close.Margin = new Thickness(12);
         close.Click += (_, _) => window.Close();

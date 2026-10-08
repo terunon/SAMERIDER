@@ -14,13 +14,10 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
   <ItemGroup>
-    <EmbeddedResource Include="../../SAMERIDER.png" LogicalName="SAMERIDER.App.SAMERIDER.png" />
-    <EmbeddedResource Include="../../Background.png" LogicalName="SAMERIDER.App.Background.png" />
     <EmbeddedResource Include="../../SAMERIDER.ico" LogicalName="SAMERIDER.App.SAMERIDER.ico" />
     <PackageReference Include="Avalonia" Version="11.3.22" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.22" />
     <PackageReference Include="SkiaSharp" Version="3.119.1" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.1" />
     <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="3.119.1" />
@@ -28,5 +25,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SAMERIDER.Core\SAMERIDER.Core.csproj" />
+    <ProjectReference Include="..\SAMERIDER.Editor\SAMERIDER.Editor.csproj" />
   </ItemGroup>
 </Project>

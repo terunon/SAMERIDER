@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>SAMERIDER.Editor</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../SAMERIDER.png" LogicalName="SAMERIDER.Editor.SAMERIDER.png" />
+    <EmbeddedResource Include="../../Background.png" LogicalName="SAMERIDER.Editor.Background.png" />
+    <AvaloniaResource Include="Assets/Fonts/*.ttf" />
+    <PackageReference Include="Avalonia" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.22" />
+    <PackageReference Include="SkiaSharp" Version="3.119.1" />
+    <ProjectReference Include="..\SAMERIDER.Core\SAMERIDER.Core.csproj" />
+  </ItemGroup>
+</Project>

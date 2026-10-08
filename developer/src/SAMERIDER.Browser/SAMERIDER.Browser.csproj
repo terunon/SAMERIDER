@@ -10,16 +10,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
     <WasmMainJSPath>wwwroot/main.js</WasmMainJSPath>
+    <WasmBuildNative>true</WasmBuildNative>
   </PropertyGroup>
   <ItemGroup>
-    <AvaloniaResource Include="../../SAMERIDER.png" Link="Assets/SAMERIDER.png" />
-    <AvaloniaResource Include="../../Background.png" Link="Assets/Background.png" />
-    <AvaloniaResource Include="Assets/Fonts/*.ttf" />
     <PackageReference Include="Avalonia" Version="11.3.22" />
     <PackageReference Include="Avalonia.Browser" Version="11.3.22" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.22" />
     <PackageReference Include="SkiaSharp.NativeAssets.WebAssembly" Version="3.119.1" />
     <ProjectReference Include="..\SAMERIDER.Core\SAMERIDER.Core.csproj" />
+    <ProjectReference Include="..\SAMERIDER.Editor\SAMERIDER.Editor.csproj" />
   </ItemGroup>
 </Project>

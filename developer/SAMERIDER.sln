@@ -13,6 +13,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SAMERIDER.Browser", "src\SAMERIDER.Browser\SAMERIDER.Browser.csproj", "{05166EED-EFF7-4943-A9AF-DB16EBC97867}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SAMERIDER.Editor", "src\SAMERIDER.Editor\SAMERIDER.Editor.csproj", "{A15C18A3-A49D-4C7C-BC1A-B822D81C6A1D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -71,6 +73,10 @@ Global
 		{05166EED-EFF7-4943-A9AF-DB16EBC97867}.Release|x64.Build.0 = Release|Any CPU
 		{05166EED-EFF7-4943-A9AF-DB16EBC97867}.Release|x86.ActiveCfg = Release|Any CPU
 		{05166EED-EFF7-4943-A9AF-DB16EBC97867}.Release|x86.Build.0 = Release|Any CPU
+		{A15C18A3-A49D-4C7C-BC1A-B822D81C6A1D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A15C18A3-A49D-4C7C-BC1A-B822D81C6A1D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A15C18A3-A49D-4C7C-BC1A-B822D81C6A1D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A15C18A3-A49D-4C7C-BC1A-B822D81C6A1D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
