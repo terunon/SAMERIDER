@@ -397,10 +397,10 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         overlayControl.Children.Add(_overlayOpacitySlider);
         Grid.SetRow(overlayControl, 3); previewPanel.Children.Add(overlayControl);
         EditorToolTip.SetTip(overlayControl, "前後のセルを重ねて表示");
-        var brand = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 4, 2) };
+        var brand = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 4, 2), MaxWidth = 260 };
         brand.Children.Add(_brandLogo);
         brand.Children.Add(new TextBlock { Text = "SAMERIDER v1.06", FontSize = 13, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Right });
-        brand.Children.Add(new TextBlock { Text = "Same-sized Raster Image Divider, Editor and Recomposer", FontSize = 12, Foreground = Brush.Parse("#A1A8B3"), HorizontalAlignment = HorizontalAlignment.Right, TextWrapping = TextWrapping.Wrap, MaxWidth = 360 });
+        brand.Children.Add(new TextBlock { Text = "Same-sized Raster Image Divider, Editor and Recomposer", FontSize = 12, Foreground = Brush.Parse("#A1A8B3"), HorizontalAlignment = HorizontalAlignment.Right, TextWrapping = TextWrapping.Wrap, MaxWidth = 260 });
         var previewHost = new Grid { RowDefinitions = RowDefinitions.Parse("*,Auto") };
         previewHost.Children.Add(previewPanel);
         var bottomTools = new Grid { ColumnDefinitions = ColumnDefinitions.Parse("Auto,*,Auto"), VerticalAlignment = VerticalAlignment.Bottom };
