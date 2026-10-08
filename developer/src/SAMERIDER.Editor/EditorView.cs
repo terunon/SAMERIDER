@@ -109,7 +109,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
     private readonly Border _statusPanel = new()
     {
         BorderBrush = Brush.Parse("#3F4652"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8),
-        Background = Brush.Parse("#171A20"), Padding = new Thickness(16, 12), Margin = new Thickness(0, 20, 0, 0), IsVisible = false
+        Background = Brush.Parse("#171A20"), Padding = new Thickness(16, 12), Margin = new Thickness(0, 20, 0, 0), IsVisible = true
     };
     private readonly HashSet<(int X, int Y)> _cellsToAnimateOnRefresh = [];
     private bool _gridResizeInProgress;
@@ -400,7 +400,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         var brand = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 4, 2) };
         brand.Children.Add(_brandLogo);
         brand.Children.Add(new TextBlock { Text = "SAMERIDER v1.06", FontSize = 13, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Right });
-        brand.Children.Add(new TextBlock { Text = "Same-sized Raster Image Divider, Editor and Recomposer", FontSize = 10, Foreground = Brush.Parse("#A1A8B3"), HorizontalAlignment = HorizontalAlignment.Right });
+        brand.Children.Add(new TextBlock { Text = "Same-sized Raster Image Divider, Editor and Recomposer", FontSize = 12, Foreground = Brush.Parse("#A1A8B3"), HorizontalAlignment = HorizontalAlignment.Right, TextWrapping = TextWrapping.Wrap, MaxWidth = 360 });
         var previewHost = new Grid { RowDefinitions = RowDefinitions.Parse("*,Auto") };
         previewHost.Children.Add(previewPanel);
         var bottomTools = new Grid { ColumnDefinitions = ColumnDefinitions.Parse("Auto,*,Auto"), VerticalAlignment = VerticalAlignment.Bottom };
@@ -697,6 +697,10 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         try
         {
             path = await _platformServices.PickPngPathAsync(StorageProvider);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
         }
         finally
         {
@@ -1729,7 +1733,6 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
     {
         if (_selectAllButton is not null)
             _selectAllButton.Content = AreAllCellsSelected() ? "全解除" : "全選択";
-        var occupiedPositions = _project.Cells.Select(cell => (cell.X, cell.Y)).ToHashSet();
         var visuals = positions is null
             ? _cellVisuals
             : positions.Distinct().Where(_cellVisuals.ContainsKey).ToDictionary(position => position, position => _cellVisuals[position]);
@@ -1743,7 +1746,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             visual.Selection.BorderBrush = Brush.Parse(color);
             visual.Selection.Background = isCurrent ? Brush.Parse("#2260A5FA") : isRangeSelected ? Brush.Parse("#22FBBF24") : Brushes.Transparent;
             visual.Selection.IsVisible = isRangeSelected;
-            var hasImage = occupiedPositions.Contains(position);
+            var hasImage = _gridCellsByPosition.ContainsKey(position);
             if (visual.Remove is not null) visual.Remove.IsVisible = isCurrent && hasImage && _gridZoom >= GRID_DETAIL_ZOOM_THRESHOLD;
             EditorToolTip.SetTip(visual.Frame, GetCellToolTip(isCurrent, hasImage));
         }
@@ -2732,7 +2735,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
 
     private static string FormatOffset(int value) => value >= 0 ? $"+{value}" : value.ToString();
 
-    private SpriteCell? FindCell(int x, int y) => _project.Cells.FirstOrDefault(cell => cell.X == x && cell.Y == y);
+    private SpriteCell? FindCell(int x, int y) => _gridCellsByPosition.GetValueOrDefault((x, y));
 
     private SKBitmap RenderCellForUI(SpriteCell? cell, SKColor? tint = null)
     {
@@ -2990,7 +2993,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         PushUndo();
         _project.Cells.Remove(cell);
         MarkDirty();
-        RefreshCellVisual((_selectedX, _selectedY));
+        RefreshCellVisual((_selectedX, _selectedY), null);
         UpdateSelectionVisuals([(_selectedX, _selectedY)]);
         RefreshPreview();
         SetStatus($"セル ({_selectedX + 1}, {_selectedY + 1}) を削除しました。");
@@ -3084,7 +3087,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
     private void SetStatus(string text)
     {
         _status.Text = text;
-        _statusPanel.IsVisible = !string.IsNullOrWhiteSpace(text);
+        _statusPanel.IsVisible = true;
         if (!_pngExportInProgress && !_imageImportInProgress) HideProgressStatus();
     }
 
