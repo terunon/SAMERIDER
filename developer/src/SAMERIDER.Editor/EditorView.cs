@@ -138,7 +138,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
     private double _scrollbarDragThumbStart;
     private readonly TextBlock _offsetReadout = new()
     {
-        Text = "X +0, Y +0", FontSize = 11, FontWeight = FontWeight.SemiBold,
+        Text = "X +0, Y +0", FontSize = 13, FontWeight = FontWeight.SemiBold,
         Foreground = Brush.Parse("#FDE68A"), HorizontalAlignment = HorizontalAlignment.Right,
         VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, -17, 0, 0),
         IsHitTestVisible = false
@@ -399,10 +399,10 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         EditorToolTip.SetTip(overlayControl, "前後のセルを重ねて表示");
         var brand = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 4, 2) };
         brand.Children.Add(_brandLogo);
-        brand.Children.Add(new TextBlock { Text = "SAMERIDER v1.06", FontSize = 13, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Right });
+        brand.Children.Add(new TextBlock { Text = "SAMERIDER v1.06", FontSize = 15, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Right });
         var brandTagline = new TextBlock
         {
-            Text = "Same-sized Raster Image Divider, Editor and Recomposer", FontSize = 12,
+            Text = "Same-sized Raster Image Divider, Editor and Recomposer", FontSize = 13,
             Foreground = Brush.Parse("#A1A8B3"), HorizontalAlignment = HorizontalAlignment.Right,
             TextWrapping = TextWrapping.NoWrap, TextTrimming = TextTrimming.CharacterEllipsis
         };
