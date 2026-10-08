@@ -2136,6 +2136,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
                         DisplayName = Path.GetFileNameWithoutExtension(fileName)
                     };
                     _project.Cells.Add(cell);
+                    _gridCellsByPosition[(x, y)] = cell;
                 }
                 else
                 {
