@@ -92,7 +92,7 @@ public static class SpriteImageService
         ProjectValidator.Validate(project);
         var originalName = Path.GetFileName(sourcePath);
         if (!ProjectValidator.IsSafeFileName(originalName))
-            throw new InvalidDataException("画像ファイル名には半角文字を使用してください。ファイル名に使えない記号や全角文字は使用できません。");
+            throw new InvalidDataException("画像ファイル名に使用できない文字が含まれています。");
         if (startX < 0 || startY < 0 || startX >= project.Columns || startY >= project.Rows)
             throw new ArgumentOutOfRangeException(nameof(startX), "配置先のセルが分割範囲外です。");
 
@@ -121,7 +121,7 @@ public static class SpriteImageService
     {
         ProjectValidator.Validate(project);
         if (!ProjectValidator.IsSafeFileName(originalName) || !string.Equals(Path.GetExtension(originalName), ".png", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("画像ファイル名には半角文字を使用してください。PNGファイルを選択してください。");
+            throw new InvalidDataException("画像ファイル名に使用できない文字が含まれているか、PNGファイルではありません。");
         if (startX < 0 || startY < 0 || startX >= project.Columns || startY >= project.Rows)
             throw new ArgumentOutOfRangeException(nameof(startX), "配置先のセルが分割範囲外です。");
         var (imageWidth, imageHeight) = GetPngSize(pngBytes);
@@ -460,7 +460,7 @@ public static class SpriteImageService
 
     public static void SavePng(SKBitmap bitmap, string path)
     {
-        if (!ProjectValidator.IsSafeFileName(Path.GetFileName(path)))
+        if (!ProjectValidator.IsSafePngOutputFileName(Path.GetFileName(path)))
             throw new InvalidDataException("出力ファイル名には半角文字を使用してください。ファイル名に使えない記号や全角文字は使用できません。");
         if (!string.Equals(Path.GetExtension(path), ".png", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("スプライトシートの拡張子は .png にしてください。");

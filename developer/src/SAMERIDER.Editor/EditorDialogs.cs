@@ -892,7 +892,9 @@ internal static class Dialogs
                     var usedHeight = rows * (long)height;
                     var remainderWidth = imageWidth - usedWidth;
                     var remainderHeight = imageHeight - usedHeight;
-                    calculation.Text = $"セル数: {columns} × {rows}（セルサイズ: {width} × {height} px）\n端数は右端 {remainderWidth}px・下端 {remainderHeight}px を切り捨てます。";
+                    calculation.Text = $"セル数: {columns} × {rows}（セルサイズ: {width} × {height} px）";
+                    if (remainderWidth != 0 || remainderHeight != 0)
+                        calculation.Text += $"\n端数は右端 {remainderWidth}px・下端 {remainderHeight}px を切り捨てます。読み込み後はセルを選択し、方向キーで必要に応じて表示位置を調節してください。";
                     calculation.Foreground = Brushes.White;
                     ok.IsEnabled = imageWidth <= 16_384 && imageHeight <= 16_384 &&
                         (long)imageWidth * imageHeight <= ProjectValidator.MaximumSheetPixelCount;
@@ -928,7 +930,7 @@ internal static class Dialogs
         var existingCellsNote = allowCellSizeChange ? string.Empty : "\n※既存セルがあるため、セルサイズは現在の設定に固定されています。";
         var header = new TextBlock
         {
-            Text = $"画像サイズ: {imageWidth} × {imageHeight} px\n画像サイズが割り切れない値のため、セルサイズを推定できませんでした。\nセルサイズを指定してください。端数はトリミングされるため、読み込み後に必要に応じて表示領域を調節してください。\n（セルを選択して方向キーで表示領域を動かせます）{existingCellsNote}",
+            Text = $"画像サイズ: {imageWidth} × {imageHeight} px\nセルサイズを指定してください。{existingCellsNote}",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(16, 16, 16, 6)
         };

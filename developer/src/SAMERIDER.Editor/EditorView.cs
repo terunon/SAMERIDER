@@ -706,7 +706,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         if (!ProjectValidator.IsSafeFileName(value))
         {
             _title.Text = _project.Title;
-            SetStatus("スプライトシート名には半角文字を使用してください。ファイル名に使えない記号や全角文字は使用できません。");
+            SetStatus("スプライトシート名にファイル名として使用できない文字が含まれています。");
             return;
         }
 
@@ -781,7 +781,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         try
         {
             if (!ProjectValidator.IsSafeFileName(Path.GetFileName(path)))
-                throw new InvalidDataException("ファイル名には半角文字を使用してください。ファイル名に使えない記号や全角文字は使用できません。");
+                throw new InvalidDataException("プロジェクトファイル名に使用できない文字が含まれています。");
             var extension = Path.GetExtension(path);
             if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
             {

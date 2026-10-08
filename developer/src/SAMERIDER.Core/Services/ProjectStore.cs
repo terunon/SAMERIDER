@@ -21,7 +21,7 @@ public static class ProjectStore
     {
         var fileName = Path.GetFileName(jsonPath);
         if (!ProjectValidator.IsSafeFileName(fileName))
-            throw new InvalidDataException("ファイル名には半角文字を使用してください。ファイル名に使えない記号や全角文字は使用できません。");
+            throw new InvalidDataException("プロジェクトファイル名に使用できない文字が含まれています。");
         if (!string.Equals(Path.GetExtension(fileName), ".json", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("プロジェクトファイルの拡張子は .json にしてください。");
         var directory = Path.GetDirectoryName(Path.GetFullPath(jsonPath))!;
@@ -52,7 +52,7 @@ public static class ProjectStore
     public static async Task<SpriteProject> LoadAsync(string jsonPath, CancellationToken cancellationToken = default)
     {
         if (!ProjectValidator.IsSafeFileName(Path.GetFileName(jsonPath)))
-            throw new InvalidDataException("ファイル名には半角文字を使用してください。ファイル名に使えない記号や全角文字は使用できません。");
+            throw new InvalidDataException("プロジェクトファイル名に使用できない文字が含まれています。");
         if (!string.Equals(Path.GetExtension(jsonPath), ".json", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("プロジェクトファイルの拡張子は .json にしてください。");
         var json = await File.ReadAllBytesAsync(jsonPath, cancellationToken);

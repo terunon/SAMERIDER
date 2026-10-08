@@ -13,7 +13,7 @@ public static class ProjectValidator
     public static bool IsSafeFileName(string fileName)
     {
         if (string.IsNullOrWhiteSpace(fileName) || fileName is "." or ".." ||
-            fileName.Any(character => character < 0x20 || character > 0x7E || InvalidFileNameCharacters.Contains(character)) ||
+            fileName.Any(character => char.IsControl(character) || InvalidFileNameCharacters.Contains(character)) ||
             fileName.EndsWith(' ') || fileName.EndsWith('.')) return false;
         var deviceName = Path.GetFileNameWithoutExtension(fileName);
         return !deviceName.Equals("CON", StringComparison.OrdinalIgnoreCase) &&
@@ -23,13 +23,16 @@ public static class ProjectValidator
             !System.Text.RegularExpressions.Regex.IsMatch(deviceName, "^(COM|LPT)[1-9]$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
     }
 
+    public static bool IsSafePngOutputFileName(string fileName) =>
+        IsSafeFileName(fileName) && fileName.All(character => character <= 0x7E);
+
     public static void Validate(SpriteProject project, string? projectDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(project);
         if (project.FormatVersion != SpriteProject.CurrentFormatVersion)
             throw new InvalidDataException($"未対応のプロジェクト形式バージョンです: {project.FormatVersion}");
         if (!IsSafeFileName(project.Title))
-            throw new InvalidDataException("スプライトシート名には半角文字を使用してください。ファイル名に使えない記号や全角文字は使用できません。");
+            throw new InvalidDataException("スプライトシート名にファイル名として使用できない文字が含まれています。");
         if (!IsSafeFileName(project.ImportFolderName))
             throw new InvalidDataException("Importフォルダ名が正しくありません。");
         if (project.CellWidth <= 0 || project.CellHeight <= 0 || project.Columns <= 0 || project.Rows <= 0)
