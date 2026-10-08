@@ -50,7 +50,7 @@ internal static class Dialogs
             HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 2)
         };
-        var previewImage = new Image { Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
+        var previewImage = new Image { Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 480, MaxHeight = 220 };
         var previewFrame = new Border
         {
             BorderBrush = Brush.Parse("#606A78"),
@@ -58,6 +58,9 @@ internal static class Dialogs
             CornerRadius = new CornerRadius(4),
             Background = Brush.Parse("#20242B"),
             Padding = new Thickness(8),
+            MaxHeight = 250,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
             Child = previewImage
         };
         var fileSizeLabel = new TextBlock { Text = "PNGサイズ: 計算中…", HorizontalAlignment = HorizontalAlignment.Center };
@@ -161,7 +164,7 @@ internal static class Dialogs
                     long fileSize;
                     using (var encoded = SpriteImageService.EncodePng(exportImage))
                         fileSize = encoded.Size;
-                    var scale = Math.Min(1f, Math.Min(640f / exportImage.Width, 340f / exportImage.Height));
+                    var scale = Math.Min(1f, Math.Min(480f / exportImage.Width, 220f / exportImage.Height));
                     var width = Math.Max(1, (int)Math.Round(exportImage.Width * scale));
                     var height = Math.Max(1, (int)Math.Round(exportImage.Height * scale));
                     using var thumbnail = new SKBitmap(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);

@@ -88,6 +88,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
     private readonly TextBlock _leftCoordinateLabel = CreateCoordinateLabel();
     private readonly TextBlock _rightCoordinateLabel = CreateCoordinateLabel();
     private Button? _selectAllButton;
+    private Action? _updatePreviewViewport;
     private readonly Image _brandLogo = new() { Width = 112, Height = 112, Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Right };
     private readonly Slider _overlayOpacitySlider = new() { Minimum = 0, Maximum = 1, Value = 0.2, Width = 220, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _noImageLabel = new() { Text = "No Image", FontSize = 20, Foreground = Brush.Parse("#A1A8B3"), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, IsVisible = false };
@@ -332,7 +333,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         var previewHeading = new TextBlock { Text = "プレビュー", FontSize = 20, FontWeight = FontWeight.SemiBold };
         EditorToolTip.SetTip(previewHeading, "方向キーで選択セルの表示位置を調整。\n左クリックで補助線を固定し、範囲を選んでトリミング。\n画像データは変更せず、座標情報のみ保存");
         previewPanel.Children.Add(previewHeading);
-        var previewFrame = new Border { BorderBrush = Brush.Parse("#3F4652"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Background = Brush.Parse("#171A20"), Width = 340, MinHeight = 0, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Stretch, ClipToBounds = true, Padding = new Thickness(12) };
+        var previewFrame = new Border { BorderBrush = Brush.Parse("#3F4652"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Background = Brush.Parse("#171A20"), Width = 340, Height = 340, MinHeight = 0, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, ClipToBounds = true, Padding = new Thickness(12) };
         Grid.SetRow(previewFrame, 1);
         EditorToolTip.SetTip(previewFrame, "方向キーで選択セルの表示位置を調整。\n左クリックで補助線を固定し、範囲を選んでトリミング。\n画像データは変更せず、座標情報のみ保存");
         var previewLayers = new Grid();
@@ -365,6 +366,20 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             _previewCrosshairOverlay.IsVisible = false;
         };
         var previewImageSlot = new Grid { Width = 340, MinHeight = 0, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Stretch, ClipToBounds = false };
+        void UpdatePreviewViewport()
+        {
+            if (previewImageSlot.Bounds.Width <= 0 || previewImageSlot.Bounds.Height <= 0 || _project.CellWidth <= 0 || _project.CellHeight <= 0) return;
+            var aspectRatio = (double)_project.CellWidth / _project.CellHeight;
+            var maxWidth = Math.Min(340, previewImageSlot.Bounds.Width);
+            var maxHeight = Math.Min(340, previewImageSlot.Bounds.Height);
+            var width = Math.Min(maxWidth, maxHeight * aspectRatio);
+            var height = width / aspectRatio;
+            previewFrame.Width = width;
+            previewFrame.Height = height;
+        }
+        _updatePreviewViewport = UpdatePreviewViewport;
+        previewImageSlot.SizeChanged += (_, _) => UpdatePreviewViewport();
+        previewPanel.SizeChanged += (_, _) => UpdatePreviewViewport();
         previewImageSlot.Children.Add(previewFrame);
         previewImageSlot.Children.Add(_offsetReadout);
         Grid.SetRow(previewImageSlot, 1); previewPanel.Children.Add(previewImageSlot);
@@ -414,6 +429,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
                 divider.Margin = new Thickness(0, 4);
                 Grid.SetColumn(previewHost, 0); Grid.SetRow(previewHost, 2);
                 previewFrame.Width = double.NaN;
+                previewFrame.Height = double.NaN;
                 previewImageSlot.Width = double.NaN;
             }
             else
@@ -430,8 +446,10 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
                 divider.Margin = new Thickness(14, 0);
                 Grid.SetColumn(previewHost, 2); Grid.SetRow(previewHost, 0);
                 previewFrame.Width = 340;
+                previewFrame.Height = 340;
                 previewImageSlot.Width = 340;
             }
+            UpdatePreviewViewport();
         }
         body.SizeChanged += (_, _) => UpdateResponsiveLayout();
         toolbar.SizeChanged += (_, e) =>
@@ -1669,6 +1687,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         ResetOffsetBatch();
         UpdateSelectionVisuals();
         RefreshPreview();
+        ShowSelectionStatus();
     }
 
     private void SelectCellWithModifiers(int x, int y, KeyModifiers modifiers)
@@ -1703,6 +1722,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         ResetOffsetBatch();
         UpdateSelectionVisuals();
         RefreshPreview();
+        ShowSelectionStatus();
     }
 
     private void UpdateSelectionVisuals(IEnumerable<(int X, int Y)>? positions = null)
@@ -2497,6 +2517,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
 
     private void RefreshPreview()
     {
+        _updatePreviewViewport?.Invoke();
         UpdatePngExportButtonState();
         _previewCrosshairPinned = false;
         _previewCrosshairOverlay.IsVisible = false;
@@ -2926,6 +2947,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         ResetOffsetBatch();
         UpdateSelectionVisuals();
         RefreshPreview();
+        ShowSelectionStatus();
     }
 
     private void ToggleSelectAllCells()
@@ -2942,6 +2964,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         ResetOffsetBatch();
         UpdateSelectionVisuals();
         RefreshPreview();
+        ShowSelectionStatus();
     }
 
     private bool AreAllCellsSelected() =>
@@ -3064,6 +3087,8 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         _statusPanel.IsVisible = !string.IsNullOrWhiteSpace(text);
         if (!_pngExportInProgress && !_imageImportInProgress) HideProgressStatus();
     }
+
+    private void ShowSelectionStatus() => SetStatus($"（{_selectedCells.Count}）セルを選択中");
 
     private void SetProgressStatus(string text, bool isIndeterminate, double progress = 0)
     {
