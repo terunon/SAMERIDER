@@ -620,7 +620,7 @@ internal static class Dialogs
         {
             if (e.Source is Button)
             {
-                ToolTip.SetTip(previewCanvas, null);
+                EditorToolTip.SetTip(previewCanvas, null);
                 return;
             }
 
@@ -632,9 +632,9 @@ internal static class Dialogs
                 return pointer.X >= left && pointer.X < left + rectangle.Width &&
                     pointer.Y >= top && pointer.Y < top + rectangle.Height;
             });
-            ToolTip.SetTip(previewCanvas, tip is null ? null : ReferenceEquals(tip.Fill, cropFill) ? "削られる領域" : "追加される領域");
+            EditorToolTip.SetTip(previewCanvas, tip is null ? null : ReferenceEquals(tip.Fill, cropFill) ? "削られる領域" : "追加される領域");
         };
-        previewCanvas.PointerExited += (_, _) => ToolTip.SetTip(previewCanvas, null);
+        previewCanvas.PointerExited += (_, _) => EditorToolTip.SetTip(previewCanvas, null);
 
         string[] labels = ["左上", "上", "右上", "左", "中央", "右", "左下", "下", "右下"];
         foreach (var (anchor, index) in Enum.GetValues<ResizeAnchor>().Select((value, index) => (value, index)))

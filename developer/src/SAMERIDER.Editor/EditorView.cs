@@ -156,7 +156,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         _projectDirectory = GetApplicationDirectory();
         Background = Brush.Parse("#0D0F12");
         Foreground = Brush.Parse("#F3F4F6");
-        FontFamily = new FontFamily("avares://SAMERIDER.Editor/Assets/Fonts#IPAGothic");
+        FontFamily = EditorToolTip.JapaneseFont;
         RenderOptions.SetBitmapInterpolationMode(_preview, BitmapInterpolationMode.HighQuality);
         RenderOptions.SetBitmapInterpolationMode(_previous, BitmapInterpolationMode.None);
         RenderOptions.SetBitmapInterpolationMode(_next, BitmapInterpolationMode.None);
@@ -238,16 +238,16 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         var toolbar = new Grid { ColumnDefinitions = ColumnDefinitions.Parse("*,Auto"), RowDefinitions = RowDefinitions.Parse("Auto,Auto") };
         var fileActions = new WrapPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left };
         var newButton = Button("新規", NewProjectAsync);
-        ToolTip.SetTip(newButton, "新しいスプライトシートを作る");
+        EditorToolTip.SetTip(newButton, "新しいスプライトシートを作る");
         fileActions.Children.Add(newButton);
         var openButton = Button("開く", OpenProjectAsync);
-        ToolTip.SetTip(openButton, "既存のSAMERIDER用jsonファイルを開く");
+        EditorToolTip.SetTip(openButton, "既存のSAMERIDER用jsonファイルを開く");
         fileActions.Children.Add(openButton);
         var saveButton = Button("保存", SaveProjectAsAsync);
-        ToolTip.SetTip(saveButton, "保存場所とファイル名を指定して、\nSAMERIDER用jsonファイルに保存する。\nCtrl+Sで上書き保存も可能");
+        EditorToolTip.SetTip(saveButton, "保存場所とファイル名を指定して、\nSAMERIDER用jsonファイルに保存する。\nCtrl+Sで上書き保存も可能");
         fileActions.Children.Add(saveButton);
         _pngExportButton = Button("PNGを書き出し", ExportPngAsync);
-        ToolTip.SetTip(_pngExportButton, "作成したスプライトシートをpng画像として出力する");
+        EditorToolTip.SetTip(_pngExportButton, "作成したスプライトシートをpng画像として出力する");
         fileActions.Children.Add(_pngExportButton);
         toolbar.Children.Add(fileActions);
         var editActions = new WrapPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
@@ -289,13 +289,13 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             Content = "全選択", HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom,
             Margin = new Thickness(0, 0, 8, 8), Padding = new Thickness(10, 5), Focusable = false, ZIndex = 10
         };
-        ToolTip.SetTip(_selectAllButton, "セル一覧の全選択／全解除（Ctrl+Aで全選択）");
+        EditorToolTip.SetTip(_selectAllButton, "セル一覧の全選択／全解除（Ctrl+Aで全選択）");
         _selectAllButton.Click += (_, _) => ToggleSelectAllCells();
         _selectAllButton.Content = AreAllCellsSelected() ? "全解除" : "全選択";
         _selectAllButton.IsEnabled = _project.Columns != 1 || _project.Rows != 1;
         Grid.SetColumn(_selectAllButton, 2); Grid.SetRow(_selectAllButton, 2); gridArea.Children.Add(_selectAllButton);
-        ToolTip.SetTip(_gridScroll, "クリックでセルを選択。\nCtrl+クリックで複数選択、Shift+クリックで範囲選択。\n選択範囲を左ドラッグで並べ替え、Delキーで削除");
-        ToolTip.SetTip(_grid, "ホイールで拡縮、右／中クリックドラッグでスクロール。\nセル上でも操作可能");
+        EditorToolTip.SetTip(_gridScroll, "クリックでセルを選択。\nCtrl+クリックで複数選択、Shift+クリックで範囲選択。\n選択範囲を左ドラッグで並べ替え、Delキーで削除");
+        EditorToolTip.SetTip(_grid, "ホイールで拡縮、右／中クリックドラッグでスクロール。\nセル上でも操作可能");
         Grid.SetColumn(_gridVerticalScrollBar, 1); Grid.SetRow(_gridVerticalScrollBar, 0); gridArea.Children.Add(_gridVerticalScrollBar);
         Grid.SetColumn(_gridHorizontalScrollBar, 0); Grid.SetRow(_gridHorizontalScrollBar, 1); gridArea.Children.Add(_gridHorizontalScrollBar);
         Grid.SetColumn(_startGuide, 0); Grid.SetRow(_startGuide, 0); gridArea.Children.Add(_startGuide);
@@ -305,14 +305,14 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         var columnControls = new StackPanel { Spacing = 8, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
         columnControls.Children.Add(GridSizeButton("＋", () => ChangeGridDimensionAsync(changeColumns: true, delta: 1)));
         columnControls.Children.Add(GridSizeButton("−", () => ChangeGridDimensionAsync(changeColumns: true, delta: -1)));
-        ToolTip.SetTip(columnControls.Children[0], "セルの行列数を増減させる");
-        ToolTip.SetTip(columnControls.Children[1], "セルの行列数を増減させる");
+        EditorToolTip.SetTip(columnControls.Children[0], "セルの行列数を増減させる");
+        EditorToolTip.SetTip(columnControls.Children[1], "セルの行列数を増減させる");
         Grid.SetColumn(columnControls, 2); Grid.SetRow(columnControls, 0); gridArea.Children.Add(columnControls);
         var rowControls = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
         rowControls.Children.Add(GridSizeButton("＋", () => ChangeGridDimensionAsync(changeColumns: false, delta: 1)));
         rowControls.Children.Add(GridSizeButton("−", () => ChangeGridDimensionAsync(changeColumns: false, delta: -1)));
-        ToolTip.SetTip(rowControls.Children[0], "セルの行列数を増減させる");
-        ToolTip.SetTip(rowControls.Children[1], "セルの行列数を増減させる");
+        EditorToolTip.SetTip(rowControls.Children[0], "セルの行列数を増減させる");
+        EditorToolTip.SetTip(rowControls.Children[1], "セルの行列数を増減させる");
         Grid.SetRow(rowControls, 2); gridArea.Children.Add(rowControls);
         Grid.SetRow(gridArea, 1); cellPanel.Children.Add(gridArea);
         var statusContent = new StackPanel { Spacing = 8 };
@@ -330,11 +330,11 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             Margin = new Thickness(8, 0, 8, 0)
         };
         var previewHeading = new TextBlock { Text = "プレビュー", FontSize = 20, FontWeight = FontWeight.SemiBold };
-        ToolTip.SetTip(previewHeading, "方向キーで選択セルの表示位置を調整。\n左クリックで補助線を固定し、範囲を選んでトリミング。\n画像データは変更せず、座標情報のみ保存");
+        EditorToolTip.SetTip(previewHeading, "方向キーで選択セルの表示位置を調整。\n左クリックで補助線を固定し、範囲を選んでトリミング。\n画像データは変更せず、座標情報のみ保存");
         previewPanel.Children.Add(previewHeading);
         var previewFrame = new Border { BorderBrush = Brush.Parse("#3F4652"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Background = Brush.Parse("#171A20"), Width = 340, MinHeight = 0, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Stretch, ClipToBounds = true, Padding = new Thickness(12) };
         Grid.SetRow(previewFrame, 1);
-        ToolTip.SetTip(previewFrame, "方向キーで選択セルの表示位置を調整。\n左クリックで補助線を固定し、範囲を選んでトリミング。\n画像データは変更せず、座標情報のみ保存");
+        EditorToolTip.SetTip(previewFrame, "方向キーで選択セルの表示位置を調整。\n左クリックで補助線を固定し、範囲を選んでトリミング。\n画像データは変更せず、座標情報のみ保存");
         var previewLayers = new Grid();
         _previous.HorizontalAlignment = HorizontalAlignment.Center; _previous.VerticalAlignment = VerticalAlignment.Center;
         _next.HorizontalAlignment = HorizontalAlignment.Center; _next.VerticalAlignment = VerticalAlignment.Center;
@@ -370,18 +370,18 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         Grid.SetRow(previewImageSlot, 1); previewPanel.Children.Add(previewImageSlot);
         var nav = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Spacing = 12, VerticalAlignment = VerticalAlignment.Center };
         var previousButton = Button("←", () => Navigate(-1), 42);
-        ToolTip.SetTip(previousButton, "前のセルへ");
+        EditorToolTip.SetTip(previousButton, "前のセルへ");
         nav.Children.Add(previousButton);
         nav.Children.Add(new TextBlock { Text = "X", VerticalAlignment = VerticalAlignment.Center }); nav.Children.Add(_previewX);
         nav.Children.Add(new TextBlock { Text = "Y", VerticalAlignment = VerticalAlignment.Center }); nav.Children.Add(_previewY);
         var nextButton = Button("→", () => Navigate(1), 42);
-        ToolTip.SetTip(nextButton, "次のセルへ");
+        EditorToolTip.SetTip(nextButton, "次のセルへ");
         nav.Children.Add(nextButton); Grid.SetRow(nav, 2); previewPanel.Children.Add(nav);
         var overlayControl = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
         overlayControl.Children.Add(new TextBlock { Text = "前後のセルを重ねて表示", VerticalAlignment = VerticalAlignment.Center });
         overlayControl.Children.Add(_overlayOpacitySlider);
         Grid.SetRow(overlayControl, 3); previewPanel.Children.Add(overlayControl);
-        ToolTip.SetTip(overlayControl, "前後のセルを重ねて表示");
+        EditorToolTip.SetTip(overlayControl, "前後のセルを重ねて表示");
         var brand = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 4, 2) };
         brand.Children.Add(_brandLogo);
         brand.Children.Add(new TextBlock { Text = "SAMERIDER v1.06", FontSize = 13, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Right });
@@ -547,7 +547,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             VerticalContentAlignment = VerticalAlignment.Center,
             Focusable = false
         };
-        ToolTip.SetTip(resetButton, "座標調整をリセット");
+        EditorToolTip.SetTip(resetButton, "座標調整をリセット");
         resetButton.Click += (_, _) => ResetSelectedCellOffset();
         Grid.SetRow(resetButton, 1);
         Grid.SetColumn(resetButton, 1);
@@ -569,7 +569,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             VerticalContentAlignment = VerticalAlignment.Center,
             Focusable = false
         };
-        ToolTip.SetTip(button, $"選択セルを{label}へ1px移動");
+        EditorToolTip.SetTip(button, $"選択セルを{label}へ1px移動");
         button.Click += (_, _) => NudgeSelectedCellOffset(dx, dy);
         Grid.SetRow(button, row);
         Grid.SetColumn(button, column);
@@ -1613,7 +1613,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             CornerRadius = new CornerRadius(7), Background = Brush.Parse("#20242C"), Opacity = animateAppearance ? 0 : 1,
             Transitions = animateAppearance ? CreateOpacityTransition() : null
         };
-        ToolTip.SetTip(border, GetCellToolTip(isSelected, cell is not null));
+        EditorToolTip.SetTip(border, GetCellToolTip(isSelected, cell is not null));
         border.PointerPressed += (_, e) =>
         {
             if (e.Source is Button || e.Source is Visual source && source.GetVisualAncestors().OfType<Button>().Any()) return;
@@ -1725,7 +1725,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             visual.Selection.IsVisible = isRangeSelected;
             var hasImage = occupiedPositions.Contains(position);
             if (visual.Remove is not null) visual.Remove.IsVisible = isCurrent && hasImage && _gridZoom >= GRID_DETAIL_ZOOM_THRESHOLD;
-            ToolTip.SetTip(visual.Frame, GetCellToolTip(isCurrent, hasImage));
+            EditorToolTip.SetTip(visual.Frame, GetCellToolTip(isCurrent, hasImage));
         }
     }
 
@@ -1860,7 +1860,12 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             .Any(group => _project.Cells.Any(cell => cell.X == group.Key && cell.Y >= group.Min(position => position.Y)));
         var canInsertRight = CanTransformSelectedLines(selectedPositions, horizontal: true, insert: true);
         var canInsertDown = CanTransformSelectedLines(selectedPositions, horizontal: false, insert: true);
-        var menu = new ContextMenu { Placement = PlacementMode.Pointer, PlacementTarget = visual.Frame };
+        var menu = new ContextMenu
+        {
+            Placement = PlacementMode.Pointer,
+            PlacementTarget = visual.Frame,
+            FontFamily = EditorToolTip.JapaneseFont
+        };
         var copy = new MenuItem { Header = "コピー (Ctrl+C)", IsEnabled = selectedCells.Length > 0 };
         copy.Click += (_, _) => CopySelectedCells();
         var paste = new MenuItem { Header = "貼り付け (Ctrl+V)", IsEnabled = _copiedCells is { Length: > 0 } };
