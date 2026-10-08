@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>SAMERIDER</string>
+  <key>CFBundleDisplayName</key><string>SAMERIDER v1.06: Same-sized Raster Image Divider, Editor and Recomposer</string>
+  <key>CFBundleIdentifier</key><string>com.sam-erider.desktop</string>
+  <key>CFBundleVersion</key><string>1.06</string>
+  <key>CFBundleShortVersionString</key><string>1.06</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleExecutable</key><string>SAMERIDER</string>
+  <key>CFBundleIconFile</key><string>SAMERIDER.icns</string>
+  <key>LSMinimumSystemVersion</key><string>12.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+</dict>
+</plist>

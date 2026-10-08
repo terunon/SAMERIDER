@@ -1,0 +1,8 @@
+SAMERIDER.exe
+SAMERIDER_Import/
+SAMERIDER.app/
+SAMERIDER-*.zip
+.publish/
+.publish.*/
+.vs/
+.idea/

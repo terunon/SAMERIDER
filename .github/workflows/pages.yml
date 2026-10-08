@@ -1,0 +1,53 @@
+name: Deploy SAMERIDER Web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install WebAssembly workload
+        run: dotnet workload install wasm-tools-net8
+
+      - name: Publish browser app
+        working-directory: developer
+        run: dotnet publish src/SAMERIDER.Browser/SAMERIDER.Browser.csproj -c Release
+
+      - name: Verify publish output
+        run: test -f developer/src/SAMERIDER.Browser/bin/SAMERIDER.Browser/Release/net8.0-browser/publish/wwwroot/index.html
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload only the browser site's static files
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: developer/src/SAMERIDER.Browser/bin/SAMERIDER.Browser/Release/net8.0-browser/publish/wwwroot
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
