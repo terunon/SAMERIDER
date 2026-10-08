@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using SkiaSharp;
 using SAMERIDER.Core.Models;
@@ -25,6 +26,8 @@ internal sealed class BrowserMainView : UserControl
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _selectedCellLabel = new() { FontSize = 16, FontWeight = FontWeight.SemiBold };
     private readonly Image _preview = new() { Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+    private readonly Image _backgroundImage = new() { Stretch = Stretch.UniformToFill, Opacity = 0.04, IsHitTestVisible = false };
+    private readonly Image _brandLogo = new() { Width = 112, Height = 112, Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Right };
     private readonly WrapPanel _cells = new();
     private readonly ScrollViewer _cellScroll = new() { HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     private (int X, int Y) _selectedPosition;
@@ -36,13 +39,19 @@ internal sealed class BrowserMainView : UserControl
         Focusable = true;
         Background = Brush.Parse("#0D0F12");
         Foreground = Brush.Parse("#F3F4F6");
+        FontFamily = new FontFamily("avares://SAMERIDER.Browser/Assets/Fonts#IPAGothic");
+        _backgroundImage.Source = LoadAssetBitmap("avares://SAMERIDER.Browser/Assets/Background.png");
+        _brandLogo.Source = LoadAssetBitmap("avares://SAMERIDER.Browser/Assets/SAMERIDER.png");
         Content = BuildLayout();
         AddHandler(KeyDownEvent, HandleKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
     }
 
     private Control BuildLayout()
     {
-        var root = new Grid { RowDefinitions = RowDefinitions.Parse("Auto,*,Auto"), Margin = new Avalonia.Thickness(20), RowSpacing = 12 };
+        var surface = new Grid { Background = Brush.Parse("#0D0F12") };
+        surface.Children.Add(_backgroundImage);
+        var root = new Grid { RowDefinitions = RowDefinitions.Parse("Auto,*,Auto"), Margin = new Avalonia.Thickness(20), RowSpacing = 12, Background = Brushes.Transparent };
+        surface.Children.Add(root);
         var toolbar = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Spacing = 8 };
         toolbar.Children.Add(new TextBlock { Text = "SAMERIDER v1.06", FontSize = 20, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Avalonia.Thickness(0, 0, 14, 0) });
         var import = new Button { Content = "PNGを開く" };
@@ -75,7 +84,7 @@ internal sealed class BrowserMainView : UserControl
         };
         Grid.SetColumn(cellPanel, 0);
         body.Children.Add(cellPanel);
-        var previewPanel = new Grid { RowDefinitions = RowDefinitions.Parse("Auto,*"), RowSpacing = 8 };
+        var previewPanel = new Grid { RowDefinitions = RowDefinitions.Parse("Auto,*,Auto"), RowSpacing = 8 };
         previewPanel.Children.Add(_selectedCellLabel);
         var imageFrame = new Border
         {
@@ -84,6 +93,12 @@ internal sealed class BrowserMainView : UserControl
         };
         Grid.SetRow(imageFrame, 1);
         previewPanel.Children.Add(imageFrame);
+        var brand = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Avalonia.Thickness(0, 4, 4, 0) };
+        brand.Children.Add(_brandLogo);
+        brand.Children.Add(new TextBlock { Text = "SAMERIDER v1.06", FontSize = 13, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Right });
+        brand.Children.Add(new TextBlock { Text = "Same-sized Raster Image Divider, Editor and Recomposer", FontSize = 10, Foreground = Brush.Parse("#A1A8B3"), HorizontalAlignment = HorizontalAlignment.Right });
+        Grid.SetRow(brand, 2);
+        previewPanel.Children.Add(brand);
         Grid.SetColumn(previewPanel, 1);
         body.Children.Add(previewPanel);
         Grid.SetRow(body, 1);
@@ -96,7 +111,13 @@ internal sealed class BrowserMainView : UserControl
         footer.Children.Add(instructions);
         Grid.SetRow(footer, 2);
         root.Children.Add(footer);
-        return root;
+        return surface;
+    }
+
+    private static Bitmap LoadAssetBitmap(string uri)
+    {
+        using var stream = AssetLoader.Open(new Uri(uri));
+        return new Bitmap(stream);
     }
 
     private async Task PickPngAsync()

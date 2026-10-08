@@ -12,6 +12,9 @@
     <WasmMainJSPath>wwwroot/main.js</WasmMainJSPath>
   </PropertyGroup>
   <ItemGroup>
+    <AvaloniaResource Include="../../SAMERIDER.png" Link="Assets/SAMERIDER.png" />
+    <AvaloniaResource Include="../../Background.png" Link="Assets/Background.png" />
+    <AvaloniaResource Include="Assets/Fonts/*.ttf" />
     <PackageReference Include="Avalonia" Version="11.3.22" />
     <PackageReference Include="Avalonia.Browser" Version="11.3.22" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
