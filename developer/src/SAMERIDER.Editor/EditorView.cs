@@ -275,8 +275,8 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         header.Children.Add(new Border { Background = Brush.Parse("#171A20"), BorderBrush = Brush.Parse("#303640"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(16, 14), Child = settings });
         DockPanel.SetDock(header, Dock.Top); root.Children.Add(header);
 
-        var body = new Grid { ColumnDefinitions = ColumnDefinitions.Parse("*,Auto,380"), RowDefinitions = RowDefinitions.Parse("*"), RowSpacing = 12 };
-        var cellPanel = new Grid { RowDefinitions = RowDefinitions.Parse("Auto,*,Auto"), RowSpacing = 14 };
+        var body = new Grid { ColumnDefinitions = ColumnDefinitions.Parse("*,12,380"), RowDefinitions = RowDefinitions.Parse("*"), RowSpacing = 12 };
+        var cellPanel = new Grid { RowDefinitions = RowDefinitions.Parse("Auto,*,Auto"), RowSpacing = 14, MinWidth = 280 };
         var cellHeading = new StackPanel { Spacing = 4 };
         cellHeading.Children.Add(new TextBlock { Text = "セル一覧", FontSize = 20, FontWeight = FontWeight.SemiBold });
         cellPanel.Children.Add(cellHeading);
@@ -322,8 +322,17 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         _statusPanel.Child = statusContent;
         Grid.SetRow(_statusPanel, 2); cellPanel.Children.Add(_statusPanel);
         body.Children.Add(cellPanel);
-        var divider = new Border { Width = 1, Background = Brush.Parse("#3F4652"), Margin = new Thickness(14, 0) };
+        var divider = new Border { Width = 1, Background = Brush.Parse("#3F4652"), IsHitTestVisible = false };
         Grid.SetColumn(divider, 1); body.Children.Add(divider);
+        var splitter = new GridSplitter
+        {
+            Width = 12, ResizeDirection = GridResizeDirection.Columns,
+            ResizeBehavior = GridResizeBehavior.PreviousAndNext, Background = Brushes.Transparent,
+            Cursor = new Cursor(StandardCursorType.SizeWestEast), HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch, ShowsPreview = false
+        };
+        EditorToolTip.SetTip(splitter, "ドラッグしてセル一覧とプレビューの幅を調整");
+        Grid.SetColumn(splitter, 1); body.Children.Add(splitter);
         var previewPanel = new Grid
         {
             RowDefinitions = RowDefinitions.Parse("Auto,*,Auto,Auto"),
@@ -401,12 +410,12 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         brand.Children.Add(_brandLogo);
         brand.Children.Add(new TextBlock { Text = "SAMERIDER v1.06", FontSize = 13, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Right });
         brand.Children.Add(new TextBlock { Text = "Same-sized Raster Image Divider, Editor and Recomposer", FontSize = 12, Foreground = Brush.Parse("#A1A8B3"), HorizontalAlignment = HorizontalAlignment.Right, TextWrapping = TextWrapping.Wrap, MaxWidth = 260 });
-        var previewHost = new Grid { RowDefinitions = RowDefinitions.Parse("*,Auto") };
+        var previewHost = new Grid { RowDefinitions = RowDefinitions.Parse("*,Auto"), MinWidth = 280 };
         previewHost.Children.Add(previewPanel);
-        var bottomTools = new Grid { ColumnDefinitions = ColumnDefinitions.Parse("Auto,*,Auto"), VerticalAlignment = VerticalAlignment.Bottom };
+        var bottomTools = new Grid { ColumnDefinitions = ColumnDefinitions.Parse("Auto,*"), VerticalAlignment = VerticalAlignment.Bottom };
         var offsetPad = BuildOffsetPad();
         Grid.SetColumn(offsetPad, 0); bottomTools.Children.Add(offsetPad);
-        Grid.SetColumn(brand, 2); bottomTools.Children.Add(brand);
+        Grid.SetColumn(brand, 1); bottomTools.Children.Add(brand);
         Grid.SetRow(bottomTools, 1); previewHost.Children.Add(bottomTools);
         Grid.SetColumn(previewHost, 2); body.Children.Add(previewHost);
         var compactLayout = false;
@@ -422,11 +431,14 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
                 Grid.SetRow(editActions, 1);
                 editActions.HorizontalAlignment = HorizontalAlignment.Left;
                 body.ColumnDefinitions = ColumnDefinitions.Parse("*");
-                body.RowDefinitions = RowDefinitions.Parse("*,Auto,*");
+                body.RowDefinitions = RowDefinitions.Parse("*,10,*");
                 Grid.SetColumn(cellPanel, 0); Grid.SetRow(cellPanel, 0);
                 Grid.SetColumn(divider, 0); Grid.SetRow(divider, 1);
                 divider.Width = double.NaN; divider.Height = 1;
-                divider.Margin = new Thickness(0, 4);
+                Grid.SetColumn(splitter, 0); Grid.SetRow(splitter, 1);
+                splitter.ResizeDirection = GridResizeDirection.Rows;
+                splitter.Width = double.NaN; splitter.Height = 10;
+                splitter.Cursor = new Cursor(StandardCursorType.SizeNorthSouth);
                 Grid.SetColumn(previewHost, 0); Grid.SetRow(previewHost, 2);
                 previewFrame.Width = double.NaN;
                 previewFrame.Height = double.NaN;
@@ -438,12 +450,15 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
                 Grid.SetColumn(editActions, 1);
                 Grid.SetRow(editActions, 0);
                 editActions.HorizontalAlignment = HorizontalAlignment.Right;
-                body.ColumnDefinitions = ColumnDefinitions.Parse("*,Auto,380");
+                body.ColumnDefinitions = ColumnDefinitions.Parse("*,12,380");
                 body.RowDefinitions = RowDefinitions.Parse("*");
                 Grid.SetColumn(cellPanel, 0); Grid.SetRow(cellPanel, 0);
                 Grid.SetColumn(divider, 1); Grid.SetRow(divider, 0);
                 divider.Width = 1; divider.Height = double.NaN;
-                divider.Margin = new Thickness(14, 0);
+                Grid.SetColumn(splitter, 1); Grid.SetRow(splitter, 0);
+                splitter.ResizeDirection = GridResizeDirection.Columns;
+                splitter.Width = 12; splitter.Height = double.NaN;
+                splitter.Cursor = new Cursor(StandardCursorType.SizeWestEast);
                 Grid.SetColumn(previewHost, 2); Grid.SetRow(previewHost, 0);
                 previewFrame.Width = 340;
                 previewFrame.Height = 340;
