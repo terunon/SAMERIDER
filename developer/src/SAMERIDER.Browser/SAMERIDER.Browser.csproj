@@ -4,8 +4,8 @@
     <TargetFramework>net8.0-browser</TargetFramework>
     <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
     <AssemblyName>SAMERIDER.Browser</AssemblyName>
-    <Version>1.06</Version>
-    <InformationalVersion>1.06</InformationalVersion>
+    <Version>1.07</Version>
+    <InformationalVersion>1.07</InformationalVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>

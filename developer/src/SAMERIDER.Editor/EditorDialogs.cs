@@ -361,7 +361,7 @@ internal static class Dialogs
 
     public static async Task<(ResizeAnchor Anchor, int CellWidth, int CellHeight)?> PickResizeSettingsAsync(
         Control owner, Bitmap sampleImage, int currentCellWidth, int currentCellHeight, int initialCellWidth, int initialCellHeight,
-        int columns, int rows, ResizeAnchor initialAnchor, Func<CancellationToken, Task<SAMERIDER.Core.Models.PixelRect?>> findCommonOpaqueBoundsAsync)
+        int columns, int rows, ResizeAnchor initialAnchor, Func<int, CancellationToken, Task<SAMERIDER.Core.Models.PixelRect?>> findCommonOpaqueBoundsAsync)
     {
         var window = new EditorDialogWindow { Title = "セルサイズの変更", Width = 560, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
         var widthInput = new TextBox { Text = initialCellWidth.ToString(), Width = 76, HorizontalContentAlignment = HorizontalAlignment.Center };
@@ -370,9 +370,28 @@ internal static class Dialogs
         {
             Content = "透明部分を切り詰める",
             IsChecked = false,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 2)
+        };
+        var alphaThresholdInput = new TextBox
+        {
+            Text = "0",
+            Width = 52,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center
+        };
+        var trimSettings = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Spacing = 6,
             Margin = new Thickness(8, 2)
         };
+        trimSettings.Children.Add(trimTransparentCheckBox);
+        trimSettings.Children.Add(new TextBlock { Text = "α閾値", VerticalAlignment = VerticalAlignment.Center });
+        trimSettings.Children.Add(alphaThresholdInput);
+        trimSettings.Children.Add(new TextBlock { Text = "(0〜255)", VerticalAlignment = VerticalAlignment.Center });
         var trimAmountLabel = new TextBlock
         {
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -475,6 +494,7 @@ internal static class Dialogs
 
         CancellationTokenSource? transparentAnalysisCancellation = null;
         Task<SAMERIDER.Core.Models.PixelRect?>? commonOpaqueBoundsTask = null;
+        int? commonOpaqueBoundsThreshold = null;
         var isTransparentAnalysisInProgress = false;
         var isWindowClosed = false;
         var transparentTrimRequestVersion = 0;
@@ -555,8 +575,19 @@ internal static class Dialogs
 
         async Task ApplyTransparentTrimAsync(ResizeAnchor anchor)
         {
-            if (trimTransparentCheckBox.IsChecked != true) return;
             var requestVersion = ++transparentTrimRequestVersion;
+            if (trimTransparentCheckBox.IsChecked != true) return;
+            if (!int.TryParse(alphaThresholdInput.Text, out var alphaThreshold) || alphaThreshold is < 0 or > 255)
+            {
+                isTransparentAnalysisInProgress = false;
+                alphaThresholdInput.IsEnabled = true;
+                trimAmountLabel.IsVisible = false;
+                status.Text = "アルファ閾値は0〜255の整数で指定してください。";
+                status.Foreground = Brushes.Orange;
+                status.IsVisible = true;
+                ok.IsEnabled = false;
+                return;
+            }
             isTransparentAnalysisInProgress = true;
             ok.IsEnabled = false;
             widthInput.IsEnabled = false;
@@ -569,7 +600,11 @@ internal static class Dialogs
             string? analysisError = null;
             try
             {
-                commonOpaqueBoundsTask ??= findCommonOpaqueBoundsAsync(transparentAnalysisCancellation!.Token);
+                if (commonOpaqueBoundsTask is null || commonOpaqueBoundsThreshold != alphaThreshold)
+                {
+                    commonOpaqueBoundsThreshold = alphaThreshold;
+                    commonOpaqueBoundsTask = findCommonOpaqueBoundsAsync(alphaThreshold, transparentAnalysisCancellation!.Token);
+                }
                 var bounds = await commonOpaqueBoundsTask;
                 if (isWindowClosed || requestVersion != transparentTrimRequestVersion || trimTransparentCheckBox.IsChecked != true) return;
                 var (anchorX, anchorY) = GetAnchorFactors(anchor);
@@ -607,6 +642,7 @@ internal static class Dialogs
                     {
                         widthInput.IsEnabled = trimTransparentCheckBox.IsChecked != true;
                         heightInput.IsEnabled = trimTransparentCheckBox.IsChecked != true;
+                        alphaThresholdInput.IsEnabled = true;
                         UpdatePreview();
                         if (analysisError is not null)
                         {
@@ -707,8 +743,13 @@ internal static class Dialogs
                 trimAmountLabel.IsVisible = false;
                 widthInput.IsEnabled = true;
                 heightInput.IsEnabled = true;
+                alphaThresholdInput.IsEnabled = true;
                 UpdatePreview();
             }
+        };
+        alphaThresholdInput.TextChanged += (_, _) =>
+        {
+            if (trimTransparentCheckBox.IsChecked == true) _ = ApplyTransparentTrimAsync(selectedAnchor);
         };
 
         var cancel = CenteredButton("キャンセル", 100, isCancel: true);
@@ -728,7 +769,7 @@ internal static class Dialogs
             Children =
             {
                 new TextBlock { Text = "セルサイズを指定しトリミングの基準点を選んでください", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(16, 16, 16, 4) },
-                trimTransparentCheckBox, trimAmountLabel, sizeInputs, previewFrame, status, actionButtons
+                trimSettings, trimAmountLabel, sizeInputs, previewFrame, status, actionButtons
             }
         };
         UpdatePreview();

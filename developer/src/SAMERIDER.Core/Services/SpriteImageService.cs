@@ -181,8 +181,13 @@ public static class SpriteImageService
         CopyProject(next, project);
     }
 
-    public static unsafe PixelRect? FindCommonOpaqueBounds(SpriteProject project, string projectDirectory, CancellationToken cancellationToken = default)
+    public static PixelRect? FindCommonOpaqueBounds(SpriteProject project, string projectDirectory, CancellationToken cancellationToken = default) =>
+        FindCommonOpaqueBounds(project, projectDirectory, 0, cancellationToken);
+
+    public static unsafe PixelRect? FindCommonOpaqueBounds(SpriteProject project, string projectDirectory, int alphaThreshold,
+        CancellationToken cancellationToken = default)
     {
+        if (alphaThreshold is < 0 or > byte.MaxValue) throw new ArgumentOutOfRangeException(nameof(alphaThreshold), "アルファ閾値は0〜255で指定してください。");
         ProjectValidator.Validate(project, projectDirectory);
         var left = project.CellWidth;
         var top = project.CellHeight;
@@ -221,7 +226,7 @@ public static class SpriteImageService
                         var green = pixel[1];
                         var red = pixel[2];
                         var alpha = pixel[3];
-                        if (alpha == 0)
+                        if (alpha <= alphaThreshold)
                         {
                             isSolidColorCell = false;
                             continue;

@@ -23,7 +23,7 @@ namespace SAMERIDER.Editor;
 
 public sealed class EditorView : UserControl, IEditorDialogPresenter
 {
-    private const string ProductName = "SAMERIDER v1.06: Same-sized Raster Image Divider, Editor and Recomposer";
+    private const string ProductName = "SAMERIDER v1.07: Same-sized Raster Image Divider, Editor and Recomposer";
     private const int MAX_UI_SOURCE_DIMENSION = 1024;
     private const int MAX_UI_SOURCE_PIXELS = 4_000_000;
     private const int MAX_CELL_PREVIEW_DIMENSION = 512;
@@ -64,6 +64,13 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
     private readonly TextBox _title = new() { Width = 190 };
     private readonly TextBox _cellWidth = new() { Width = 64 };
     private readonly TextBox _cellHeight = new() { Width = 64 };
+    private readonly TextBlock _cellSizeLabel = new()
+    {
+        Text = "セルサイズ X × Y",
+        VerticalAlignment = VerticalAlignment.Center,
+        Margin = new Thickness(12, 0, 0, 0),
+        Cursor = new Cursor(StandardCursorType.Hand)
+    };
     private readonly TextBlock _cellCount = new() { Foreground = Brush.Parse("#89919D"), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right };
     private readonly TextBox _previewX = new() { Width = 48, Height = 36, Text = "1", TextAlignment = TextAlignment.Left, VerticalAlignment = VerticalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
     private readonly TextBox _previewY = new() { Width = 48, Height = 36, Text = "1", TextAlignment = TextAlignment.Left, VerticalAlignment = VerticalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
@@ -79,6 +86,11 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
     private readonly Image _preview = new() { Stretch = Stretch.Uniform };
     private readonly Image _previous = new() { Stretch = Stretch.Uniform };
     private readonly Image _next = new() { Stretch = Stretch.Uniform };
+    private readonly TextBlock _overlayLabel = new()
+    {
+        Text = "前後のセルを重ねて表示",
+        VerticalAlignment = VerticalAlignment.Center
+    };
     private readonly Canvas _previewCrosshairOverlay = new() { IsHitTestVisible = false, IsVisible = false, ZIndex = 20 };
     private readonly List<Avalonia.Controls.Shapes.Rectangle> _previewCropRegions = [];
     private readonly Avalonia.Controls.Shapes.Line _previewCrosshairHorizontal = new() { Stroke = Brush.Parse("#FDE68A"), StrokeThickness = 1 };
@@ -207,6 +219,14 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             input.LostFocus += async (_, _) => await CommitCellSizeAsync();
             input.KeyDown += async (_, e) => { if (e.Key == Key.Enter) { e.Handled = true; await CommitCellSizeAsync(); } };
         }
+        _cellSizeLabel.PointerPressed += async (_, e) =>
+        {
+            if (!e.GetCurrentPoint(_cellSizeLabel).Properties.IsLeftButtonPressed) return;
+            e.Handled = true;
+            var width = int.TryParse(_cellWidth.Text, out var parsedWidth) && parsedWidth > 0 ? parsedWidth : _project.CellWidth;
+            var height = int.TryParse(_cellHeight.Text, out var parsedHeight) && parsedHeight > 0 ? parsedHeight : _project.CellHeight;
+            await CommitCellSizeAsync((ResizeAnchor.Bottom, width, height));
+        };
         _previewX.LostFocus += (_, _) => NavigateByCoordinates(); _previewY.LostFocus += (_, _) => NavigateByCoordinates();
         _previewX.KeyDown += (_, e) => { if (e.Key == Key.Enter) { NavigateByCoordinates(); e.Handled = true; } };
         _previewY.KeyDown += (_, e) => { if (e.Key == Key.Enter) { NavigateByCoordinates(); e.Handled = true; } };
@@ -265,7 +285,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         var settings = new Grid { ColumnDefinitions = ColumnDefinitions.Parse("*,Auto"), VerticalAlignment = VerticalAlignment.Center };
         var settingInputs = new WrapPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         settingInputs.Children.Add(new TextBlock { Text = "スプライトシート名", VerticalAlignment = VerticalAlignment.Center }); settingInputs.Children.Add(_title);
-        settingInputs.Children.Add(new TextBlock { Text = "セルサイズ X × Y", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) });
+        settingInputs.Children.Add(_cellSizeLabel);
         settingInputs.Children.Add(_cellWidth);
         settingInputs.Children.Add(new TextBlock { Text = "×", VerticalAlignment = VerticalAlignment.Center }); settingInputs.Children.Add(_cellHeight);
         settingInputs.Children.Add(new TextBlock { Text = "px", VerticalAlignment = VerticalAlignment.Center });
@@ -393,13 +413,13 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         EditorToolTip.SetTip(nextButton, "次のセルへ");
         nav.Children.Add(nextButton); Grid.SetRow(nav, 2); previewPanel.Children.Add(nav);
         var overlayControl = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
-        overlayControl.Children.Add(new TextBlock { Text = "前後のセルを重ねて表示", VerticalAlignment = VerticalAlignment.Center });
+        overlayControl.Children.Add(_overlayLabel);
         overlayControl.Children.Add(_overlayOpacitySlider);
         Grid.SetRow(overlayControl, 3); previewPanel.Children.Add(overlayControl);
-        EditorToolTip.SetTip(overlayControl, "前後のセルを重ねて表示");
+        EditorToolTip.SetTip(overlayControl, "前後のセルまたは選択中セルを重ねて表示");
         var brand = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 4, 2) };
         brand.Children.Add(_brandLogo);
-        brand.Children.Add(new TextBlock { Text = "SAMERIDER v1.06", FontSize = 15, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Right });
+        brand.Children.Add(new TextBlock { Text = "SAMERIDER v1.07", FontSize = 15, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Right });
         var brandTagline = new TextBlock
         {
             Text = "Same-sized Raster Image Divider, Editor and Recomposer", FontSize = 13,
@@ -957,8 +977,8 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
                 var resizeSettings = await Dialogs.PickResizeSettingsAsync(
                     this, sampleImage, _project.CellWidth, _project.CellHeight, width, height, _project.Columns, _project.Rows,
                     suggestedResize?.Anchor ?? ResizeAnchor.Bottom,
-                    cancellationToken => Task.Run(
-                        () => SpriteImageService.FindCommonOpaqueBounds(projectToAnalyze, projectDirectory, cancellationToken), cancellationToken));
+                    (alphaThreshold, cancellationToken) => Task.Run(
+                        () => SpriteImageService.FindCommonOpaqueBounds(projectToAnalyze, projectDirectory, alphaThreshold, cancellationToken), cancellationToken));
                 if (resizeSettings is null) { SyncFields(); return; }
                 width = resizeSettings.Value.CellWidth;
                 height = resizeSettings.Value.CellHeight;
@@ -2535,17 +2555,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         _offsetReadout.Text = $"X {FormatOffset(current?.OffsetX ?? 0)}, Y {FormatOffset(current?.OffsetY ?? 0)}";
         SetImage(_preview, CreateBitmap(RenderSelectedCellForUI(current)));
         _noImageLabel.IsVisible = current is null;
-        var index = _selectedY * _project.Columns + _selectedX;
-        var previousCell = index > 0 ? FindCell((index - 1) % _project.Columns, (index - 1) / _project.Columns) : null;
-        var nextIndex = index + 1;
-        var nextCell = nextIndex < _project.Columns * _project.Rows ? FindCell(nextIndex % _project.Columns, nextIndex / _project.Columns) : null;
-        if (_overlayOpacity > 0)
-        {
-            var alpha = (byte)Math.Clamp(Math.Round(_overlayOpacity * 255), 0, 255);
-            SetImage(_previous, CreateBitmap(RenderCellForUI(previousCell, new SKColor(30, 90, 255, alpha))));
-            SetImage(_next, CreateBitmap(RenderCellForUI(nextCell, new SKColor(255, 40, 40, alpha))));
-        }
-        else { SetImage(_previous, null); SetImage(_next, null); }
+        RefreshOverlayPreview();
         _previewX.Text = (_selectedX + 1).ToString(); _previewY.Text = (_selectedY + 1).ToString();
     }
 
@@ -2557,6 +2567,70 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         _offsetReadout.Text = $"X {FormatOffset(current?.OffsetX ?? 0)}, Y {FormatOffset(current?.OffsetY ?? 0)}";
         SetImage(_preview, CreateBitmap(RenderSelectedCellForUI(current)));
         _noImageLabel.IsVisible = current is null;
+        RefreshOverlayPreview();
+    }
+
+    private void RefreshOverlayPreview()
+    {
+        var hasMultipleSelection = _selectedCells.Count > 1;
+        _overlayLabel.Text = hasMultipleSelection ? "選択中セルを重ねて表示" : "前後のセルを重ねて表示";
+        if (_overlayOpacity <= 0)
+        {
+            SetImage(_previous, null);
+            SetImage(_next, null);
+            return;
+        }
+
+        var alpha = (byte)Math.Clamp(Math.Round(_overlayOpacity * 255), 0, 255);
+        if (hasMultipleSelection)
+        {
+            var tint = new SKColor(30, 90, 255, alpha);
+            SetImage(_previous, CreateBitmap(RenderSelectedCellsOverlayForUI(tint)));
+            SetImage(_next, null);
+            return;
+        }
+
+        var index = _selectedY * _project.Columns + _selectedX;
+        var previousCell = index > 0 ? FindCell((index - 1) % _project.Columns, (index - 1) / _project.Columns) : null;
+        var nextIndex = index + 1;
+        var nextCell = nextIndex < _project.Columns * _project.Rows ? FindCell(nextIndex % _project.Columns, nextIndex / _project.Columns) : null;
+        SetImage(_previous, CreateBitmap(RenderCellForUI(previousCell, new SKColor(30, 90, 255, alpha))));
+        SetImage(_next, CreateBitmap(RenderCellForUI(nextCell, new SKColor(255, 40, 40, alpha))));
+    }
+
+    private SKBitmap RenderSelectedCellsOverlayForUI(SKColor tint)
+    {
+        var cells = _selectedCells
+            .OrderBy(position => position.Y)
+            .ThenBy(position => position.X)
+            .Select(position => FindCell(position.X, position.Y))
+            .OfType<SpriteCell>()
+            .ToArray();
+        if (cells.Length == 0) return SpriteImageService.RenderCell(_project, null, (SKBitmap?)null, tint);
+
+        var first = RenderCellForUI(cells[0], tint);
+        var output = new SKBitmap(first.Width, first.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+        output.Erase(SKColors.Transparent);
+        try
+        {
+            using (first)
+            using (var canvas = new SKCanvas(output))
+            {
+                canvas.DrawBitmap(first, 0, 0);
+                foreach (var cell in cells.Skip(1))
+                {
+                    using var rendered = RenderCellForUI(cell, tint);
+                    canvas.DrawBitmap(rendered, 0, 0);
+                }
+                canvas.Flush();
+            }
+            return output;
+        }
+        catch
+        {
+            output.Dispose();
+            throw;
+        }
     }
 
     private void HandlePreviewPointerPressed(Border previewFrame, Grid previewLayers, PointerPressedEventArgs e)
