@@ -375,7 +375,7 @@ internal static class Dialogs
         };
         var alphaThresholdInput = new TextBox
         {
-            Text = "0",
+            Text = "80",
             Width = 52,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center
@@ -389,7 +389,7 @@ internal static class Dialogs
             Margin = new Thickness(8, 2)
         };
         trimSettings.Children.Add(trimTransparentCheckBox);
-        trimSettings.Children.Add(new TextBlock { Text = "α閾値", VerticalAlignment = VerticalAlignment.Center });
+        trimSettings.Children.Add(new TextBlock { Text = "アルファ閾値", VerticalAlignment = VerticalAlignment.Center });
         trimSettings.Children.Add(alphaThresholdInput);
         trimSettings.Children.Add(new TextBlock { Text = "(0〜255)", VerticalAlignment = VerticalAlignment.Center });
         var trimAmountLabel = new TextBlock

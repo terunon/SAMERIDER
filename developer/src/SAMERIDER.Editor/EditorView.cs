@@ -57,6 +57,13 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
     private Button? _redoButton;
     private Button? _pngExportButton;
     private readonly Dictionary<string, CachedSourceBitmap> _sourceBitmaps = new(StringComparer.Ordinal);
+    // Multi-cell overlay rendering is driven by a slider, so keep the expensive
+    // per-cell tinting and the composed image cached separately.  The slider only
+    // changes the alpha and must not make us walk every source pixel again.
+    private readonly Dictionary<(int X, int Y), (OverlayCellCacheKey Key, SKBitmap Bitmap)> _selectedOverlayCells = [];
+    private SKBitmap? _selectedOverlayComposite;
+    private OverlayCellCacheKey[]? _selectedOverlayCompositeKeys;
+    private SKColor _selectedOverlayCompositeTint;
     private string? _selectedPreviewAssetPath;
     private CachedSourceBitmap? _selectedPreviewSource;
     private int _selectedPreviewCellWidth;
@@ -2606,32 +2613,92 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             .Select(position => FindCell(position.X, position.Y))
             .OfType<SpriteCell>()
             .ToArray();
-        if (cells.Length == 0) return SpriteImageService.RenderCell(_project, null, (SKBitmap?)null, tint);
-
-        var first = RenderCellForUI(cells[0], tint);
-        var output = new SKBitmap(first.Width, first.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
-        output.Erase(SKColors.Transparent);
-        try
+        if (cells.Length == 0)
         {
-            using (first)
-            using (var canvas = new SKCanvas(output))
+            foreach (var cached in _selectedOverlayCells.Values) cached.Bitmap.Dispose();
+            _selectedOverlayCells.Clear();
+            _selectedOverlayComposite?.Dispose();
+            _selectedOverlayComposite = null;
+            _selectedOverlayCompositeKeys = null;
+            return SpriteImageService.RenderCell(_project, null, (SKBitmap?)null, tint);
+        }
+
+        // Selection changes are common while Ctrl/Shift-clicking.  Release
+        // cached cells that are no longer part of the selection so repeated
+        // selection changes do not grow the bitmap cache indefinitely.
+        var selectedPositions = cells.Select(cell => (cell.X, cell.Y)).ToHashSet();
+        foreach (var position in _selectedOverlayCells.Keys.Where(position => !selectedPositions.Contains(position)).ToArray())
+        {
+            if (_selectedOverlayCells.Remove(position, out var cached)) cached.Bitmap.Dispose();
+        }
+
+        var keys = cells.Select(cell => CreateOverlayCellCacheKey(cell, tint)).ToArray();
+        var tintWithoutAlpha = new SKColor(tint.Red, tint.Green, tint.Blue, 255);
+        if (_selectedOverlayComposite is null ||
+            !_selectedOverlayCompositeTint.Equals(tintWithoutAlpha) ||
+            _selectedOverlayCompositeKeys is null ||
+            !_selectedOverlayCompositeKeys.SequenceEqual(keys))
+        {
+            _selectedOverlayComposite?.Dispose();
+            _selectedOverlayComposite = null;
+            _selectedOverlayCompositeKeys = keys;
+            _selectedOverlayCompositeTint = tintWithoutAlpha;
+
+            var first = GetOrCreateSelectedOverlayCell(cells[0], keys[0], tintWithoutAlpha);
+            var composite = new SKBitmap(first.Width, first.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+            composite.Erase(SKColors.Transparent);
+            try
             {
+                using var canvas = new SKCanvas(composite);
                 canvas.DrawBitmap(first, 0, 0);
-                foreach (var cell in cells.Skip(1))
+                for (var i = 1; i < cells.Length; i++)
                 {
-                    using var rendered = RenderCellForUI(cell, tint);
+                    var rendered = GetOrCreateSelectedOverlayCell(cells[i], keys[i], tintWithoutAlpha);
                     canvas.DrawBitmap(rendered, 0, 0);
                 }
                 canvas.Flush();
+                _selectedOverlayComposite = composite;
             }
-            return output;
+            catch
+            {
+                composite.Dispose();
+                throw;
+            }
         }
-        catch
+
+        // Apply the changing slider alpha in one draw over the cached composite.
+        var output = new SKBitmap(_selectedOverlayComposite.Width, _selectedOverlayComposite.Height,
+            SKColorType.Bgra8888, SKAlphaType.Premul);
+        output.Erase(SKColors.Transparent);
+        using (var canvas = new SKCanvas(output))
+        using (var paint = new SKPaint { Color = new SKColor(255, 255, 255, tint.Alpha) })
         {
-            output.Dispose();
-            throw;
+            canvas.DrawBitmap(_selectedOverlayComposite, 0, 0, paint);
+            canvas.Flush();
         }
+        return output;
     }
+
+    private SKBitmap GetOrCreateSelectedOverlayCell(SpriteCell cell, OverlayCellCacheKey key, SKColor tint)
+    {
+        var position = (cell.X, cell.Y);
+        if (_selectedOverlayCells.TryGetValue(position, out var cached) && cached.Key.Equals(key)) return cached.Bitmap;
+
+        if (_selectedOverlayCells.Remove(position, out var old)) old.Bitmap.Dispose();
+        var source = GetSourceBitmap(cell) ?? throw new InvalidOperationException($"画像の読み込みに失敗しました: {cell.AssetPath}");
+        var bitmap = SpriteImageService.RenderCellThumbnail(_project, cell, source.Bitmap, 512, source.ScaleX, source.ScaleY, tint);
+        _selectedOverlayCells[position] = (key, bitmap);
+        return bitmap;
+    }
+
+    private OverlayCellCacheKey CreateOverlayCellCacheKey(SpriteCell cell, SKColor tint) => new(
+        cell.X, cell.Y, cell.AssetPath,
+        cell.SourceRect.X, cell.SourceRect.Y, cell.SourceRect.Width, cell.SourceRect.Height,
+        cell.OffsetX, cell.OffsetY,
+        // Cell size changes alter the thumbnail dimensions even when the cell
+        // metadata itself remains unchanged.
+        _project.CellWidth, _project.CellHeight,
+        tint.Red, tint.Green, tint.Blue);
 
     private void HandlePreviewPointerPressed(Border previewFrame, Grid previewLayers, PointerPressedEventArgs e)
     {
@@ -2849,6 +2916,11 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
     {
         foreach (var bitmap in _sourceBitmaps.Values) bitmap.Bitmap.Dispose();
         _sourceBitmaps.Clear();
+        foreach (var cached in _selectedOverlayCells.Values) cached.Bitmap.Dispose();
+        _selectedOverlayCells.Clear();
+        _selectedOverlayComposite?.Dispose();
+        _selectedOverlayComposite = null;
+        _selectedOverlayCompositeKeys = null;
         if (_selectedPreviewSource is { } previewSource) previewSource.Bitmap.Dispose();
         _selectedPreviewSource = null;
         _selectedPreviewAssetPath = null;
@@ -3274,6 +3346,13 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
     }
 
     private readonly record struct CachedSourceBitmap(SKBitmap Bitmap, float ScaleX, float ScaleY);
+
+    private readonly record struct OverlayCellCacheKey(
+        int X, int Y, string AssetPath,
+        int SourceX, int SourceY, int SourceWidth, int SourceHeight,
+        int OffsetX, int OffsetY,
+        int CellWidth, int CellHeight,
+        byte TintRed, byte TintGreen, byte TintBlue);
 
     private static SpriteProject CreateNewProject() => new() { Title = "SAMERIDER", CellWidth = 64, CellHeight = 64, Columns = 1, Rows = 1 };
 }
