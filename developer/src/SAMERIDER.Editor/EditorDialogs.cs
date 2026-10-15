@@ -14,7 +14,7 @@ namespace SAMERIDER.Editor;
 
 internal static class Dialogs
 {
-    public static async Task<(int ColorCount, bool SelectedOnly)?> PickPngExportSettingsAsync(
+    public static async Task<(int ColorCount, bool SelectedOnly, bool RemovePixelNoise, int AlphaThreshold, bool RemoveAdjacentCellBleed, int AdjacentCellBleedWidth)?> PickPngExportSettingsAsync(
         Control owner,
         SKBitmap source,
         int cellWidth,
@@ -47,9 +47,61 @@ internal static class Dialogs
         {
             Content = "選択中セルだけを書き出す",
             IsChecked = initialSelectedOnly,
-            HorizontalAlignment = HorizontalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Left,
             Margin = new Thickness(0, 2)
         };
+        var removePixelNoiseCheckBox = new CheckBox
+        {
+            Content = "セル内のピクセルごみを除去する",
+            IsChecked = false,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        EditorToolTip.SetTip(removePixelNoiseCheckBox, "不透明度が指定値未満のピクセルを透明に置き換える。肉眼で見えづらいブラシのはみ出しやアンチエイリアスの跡を消すことができる");
+        var alphaThresholdInput = new TextBox
+        {
+            Text = "50",
+            Width = 52,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center
+        };
+        var pixelNoiseSettings = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+            Spacing = 6,
+            Margin = new Thickness(0, 2)
+        };
+        pixelNoiseSettings.Children.Add(removePixelNoiseCheckBox);
+        pixelNoiseSettings.Children.Add(new TextBlock { Text = "Alpha閾値", VerticalAlignment = VerticalAlignment.Center });
+        pixelNoiseSettings.Children.Add(alphaThresholdInput);
+        pixelNoiseSettings.Children.Add(new TextBlock { Text = "(0〜255)", VerticalAlignment = VerticalAlignment.Center });
+        var removeAdjacentCellBleedCheckBox = new CheckBox
+        {
+            Content = "隣接セルのはみ出しを除去",
+            IsChecked = false,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        EditorToolTip.SetTip(removeAdjacentCellBleedCheckBox, "各セル外周に孤立したドットや線が残っていれば削除する。原本の画像に隣接セルのはみ出しがある場合に有効");
+        var adjacentCellBleedWidthInput = new TextBox
+        {
+            Text = "2",
+            Width = 52,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center
+        };
+        var adjacentCellBleedSettings = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+            Spacing = 6,
+            Margin = new Thickness(0, 2)
+        };
+        adjacentCellBleedSettings.Children.Add(removeAdjacentCellBleedCheckBox);
+        adjacentCellBleedSettings.Children.Add(new TextBlock { Text = "幅", VerticalAlignment = VerticalAlignment.Center });
+        adjacentCellBleedSettings.Children.Add(adjacentCellBleedWidthInput);
+        adjacentCellBleedSettings.Children.Add(new TextBlock { Text = "px", VerticalAlignment = VerticalAlignment.Center });
         var previewImage = new Image { Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 480, MaxHeight = 220 };
         var previewFrame = new Border
         {
@@ -83,7 +135,7 @@ internal static class Dialogs
             Margin = new Thickness(18),
             RowSpacing = 8
         };
-        var header = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center };
+        var header = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Stretch };
         header.Children.Add(new TextBlock
         {
             Text = "書き出し時の色数を指定してください。",
@@ -91,6 +143,8 @@ internal static class Dialogs
             VerticalAlignment = VerticalAlignment.Center
         });
         header.Children.Add(selectedOnlyCheckBox);
+        header.Children.Add(pixelNoiseSettings);
+        header.Children.Add(adjacentCellBleedSettings);
         content.Children.Add(header);
         Grid.SetRow(qualityLabel, 1);
         content.Children.Add(qualityLabel);
@@ -122,10 +176,33 @@ internal static class Dialogs
         content.Children.Add(buttons);
         window.Content = content;
 
-        (int ColorCount, bool SelectedOnly)? selectedSettings = null;
+        (int ColorCount, bool SelectedOnly, bool RemovePixelNoise, int AlphaThreshold, bool RemoveAdjacentCellBleed, int AdjacentCellBleedWidth)? selectedSettings = null;
         ok.Click += (_, _) =>
         {
-            selectedSettings = (colorOptions[(int)Math.Round(qualitySlider.Value)], selectedOnlyCheckBox.IsChecked == true);
+            var removePixelNoise = removePixelNoiseCheckBox.IsChecked == true;
+            if (!int.TryParse(alphaThresholdInput.Text, out var alphaThreshold) || alphaThreshold is < 0 or > 255)
+            {
+                if (removePixelNoise)
+                {
+                    previewStatus.Text = "Alpha閾値は0〜255の整数で指定してください。";
+                    previewStatus.Foreground = Brushes.Orange;
+                    return;
+                }
+                alphaThreshold = 50;
+            }
+            var removeAdjacentCellBleed = removeAdjacentCellBleedCheckBox.IsChecked == true;
+            if (!int.TryParse(adjacentCellBleedWidthInput.Text, out var adjacentCellBleedWidth) || adjacentCellBleedWidth < 0)
+            {
+                if (removeAdjacentCellBleed)
+                {
+                    previewStatus.Text = "はみ出し除去幅は0以上の整数で指定してください。";
+                    previewStatus.Foreground = Brushes.Orange;
+                    return;
+                }
+                adjacentCellBleedWidth = 2;
+            }
+            selectedSettings = (colorOptions[(int)Math.Round(qualitySlider.Value)], selectedOnlyCheckBox.IsChecked == true,
+                removePixelNoise, alphaThreshold, removeAdjacentCellBleed, adjacentCellBleedWidth);
             window.Close(true);
         };
         cancel.Click += (_, _) => window.Close(false);
@@ -147,9 +224,26 @@ internal static class Dialogs
             ok.IsEnabled = false;
             var colorCount = colorOptions[(int)Math.Round(qualitySlider.Value)];
             var selectedOnly = selectedOnlyCheckBox.IsChecked == true;
+            var removePixelNoise = removePixelNoiseCheckBox.IsChecked == true;
+            var removeAdjacentCellBleed = removeAdjacentCellBleedCheckBox.IsChecked == true;
+            var hasValidAlphaThreshold = int.TryParse(alphaThresholdInput.Text, out var alphaThreshold) && alphaThreshold is >= 0 and <= 255;
+            var hasValidAdjacentCellBleedWidth = int.TryParse(adjacentCellBleedWidthInput.Text, out var adjacentCellBleedWidth) && adjacentCellBleedWidth >= 0;
             qualityLabel.Text = colorCount == 0 ? "色数: フルカラー" : $"色数: {colorCount}色";
             previewStatus.Text = "プレビューを生成しています…";
+            previewStatus.Foreground = Brush.Parse("#A1A8B3");
             fileSizeLabel.Text = "PNGサイズ: 計算中…";
+            if (removePixelNoise && !hasValidAlphaThreshold)
+            {
+                previewStatus.Text = "Alpha閾値は0〜255の整数で指定してください。";
+                previewStatus.Foreground = Brushes.Orange;
+                return;
+            }
+            if (removeAdjacentCellBleed && !hasValidAdjacentCellBleedWidth)
+            {
+                previewStatus.Text = "はみ出し除去幅は0以上の整数で指定してください。";
+                previewStatus.Foreground = Brushes.Orange;
+                return;
+            }
             try
             {
                 await Task.Delay(140, cancellation.Token);
@@ -159,8 +253,16 @@ internal static class Dialogs
                         ? SpriteImageService.ExportSelectedCells(source, cellWidth, cellHeight, selectedPositions, cancellation.Token)
                         : null;
                     var sourceImage = selectedImage ?? source;
-                    using var quantized = colorCount == 0 ? null : SpriteImageService.Quantize(sourceImage, colorCount, cancellation.Token);
-                    var exportImage = quantized ?? sourceImage;
+                    using var cleanedImage = removePixelNoise
+                        ? SpriteImageService.RemoveLowAlphaPixels(sourceImage, alphaThreshold, cancellation.Token)
+                        : null;
+                    var imageForBleedCleanup = cleanedImage ?? sourceImage;
+                    using var bleedCleanedImage = removeAdjacentCellBleed
+                        ? SpriteImageService.RemoveAdjacentCellBleedLines(imageForBleedCleanup, cellWidth, cellHeight, adjacentCellBleedWidth, cancellation.Token)
+                        : null;
+                    var imageForQuantize = bleedCleanedImage ?? imageForBleedCleanup;
+                    using var quantized = colorCount == 0 ? null : SpriteImageService.Quantize(imageForQuantize, colorCount, cancellation.Token);
+                    var exportImage = quantized ?? imageForQuantize;
                     long fileSize;
                     using (var encoded = SpriteImageService.EncodePng(exportImage))
                         fileSize = encoded.Size;
@@ -207,6 +309,22 @@ internal static class Dialogs
         selectedOnlyCheckBox.PropertyChanged += (_, e) =>
         {
             if (e.Property == CheckBox.IsCheckedProperty) OnSettingsChanged();
+        };
+        removePixelNoiseCheckBox.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == CheckBox.IsCheckedProperty) OnSettingsChanged();
+        };
+        alphaThresholdInput.TextChanged += (_, _) =>
+        {
+            if (removePixelNoiseCheckBox.IsChecked == true) OnSettingsChanged();
+        };
+        removeAdjacentCellBleedCheckBox.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == CheckBox.IsCheckedProperty) OnSettingsChanged();
+        };
+        adjacentCellBleedWidthInput.TextChanged += (_, _) =>
+        {
+            if (removeAdjacentCellBleedCheckBox.IsChecked == true) OnSettingsChanged();
         };
         _ = RefreshPreviewAsync();
         var accepted = await window.ShowDialog<bool>(owner);
@@ -991,6 +1109,50 @@ internal static class Dialogs
         close.HorizontalAlignment = HorizontalAlignment.Center; close.Margin = new Thickness(12);
         close.Click += (_, _) => window.Close();
         window.Content = new StackPanel { Children = { new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(18), MaxWidth = 430 }, close } };
+        await window.ShowDialog(owner);
+    }
+
+    public static async Task ShowAboutAsync(Control owner)
+    {
+        var window = new EditorDialogWindow
+        {
+            Title = "サメライダーとは？",
+            Width = 620,
+            Height = 520,
+            MinWidth = 420,
+            MinHeight = 360,
+            CanResize = true,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+        var description = new TextBlock
+        {
+            Text = """
+                   等寸ラスター画像分割・編集・組立器
+                   Same-sized Raster Image Divider, Editor and Recomposer
+                   略してサメライダーは、ゲーム用スプライトシートの編集に特化したWebツールです。
+
+                   ・原本画像を侵襲せずスプライトシートの分割、並べ替え、個別位置調整ができます
+                   ・余白の自動一括トリミングや、透明部分の一括追加ができます
+                   ・出力PNGファイルの減色軽量化ができます
+                   ・編集データの保存（.sameriderバンドル形式）と復元ができます
+                   ・サメには乗れません
+
+                   ツールはページ内に埋め込まれており、インターネット通信を使用しません。
+                   （ページが読み込み済みならLANやWi-fiを切っても動きますし、
+                   　本ページ自体をローカルサーバーに取り込めば普通にローカルで動きます）
+                   画像が外部送信されたり誰かに閲覧されることはありませんのでご安心ください。
+
+                   2026.10.15　terunon's Lab
+                   """,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(20),
+            MaxWidth = 560
+        };
+        var close = CenteredButton("閉じる", 100, isDefault: true, isCancel: true);
+        close.HorizontalAlignment = HorizontalAlignment.Center;
+        close.Margin = new Thickness(12, 0, 12, 16);
+        close.Click += (_, _) => window.Close();
+        window.Content = new StackPanel { Children = { description, close } };
         await window.ShowDialog(owner);
     }
 

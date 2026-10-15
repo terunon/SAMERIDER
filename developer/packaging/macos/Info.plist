@@ -3,10 +3,10 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleName</key><string>SAMERIDER</string>
-  <key>CFBundleDisplayName</key><string>SAMERIDER v1.07: Same-sized Raster Image Divider, Editor and Recomposer</string>
+  <key>CFBundleDisplayName</key><string>SAMERIDER v1.08: Same-sized Raster Image Divider, Editor and Recomposer</string>
   <key>CFBundleIdentifier</key><string>com.sam-erider.desktop</string>
-  <key>CFBundleVersion</key><string>1.07</string>
-  <key>CFBundleShortVersionString</key><string>1.07</string>
+  <key>CFBundleVersion</key><string>1.08</string>
+  <key>CFBundleShortVersionString</key><string>1.08</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleExecutable</key><string>SAMERIDER</string>
   <key>CFBundleIconFile</key><string>SAMERIDER.icns</string>

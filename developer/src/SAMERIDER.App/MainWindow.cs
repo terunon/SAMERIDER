@@ -13,7 +13,7 @@ internal sealed class MainWindow : Window
 
     public MainWindow()
     {
-        Title = "SAMERIDER v1.07: Same-sized Raster Image Divider, Editor and Recomposer";
+        Title = "SAMERIDER v1.08: Same-sized Raster Image Divider, Editor and Recomposer";
         using var iconStream = typeof(MainWindow).Assembly.GetManifestResourceStream("SAMERIDER.App.SAMERIDER.ico");
         Icon = new WindowIcon(iconStream ?? throw new InvalidOperationException("アプリアイコンを読み込めませんでした。"));
         Background = Brush.Parse("#0D0F12");

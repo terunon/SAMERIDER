@@ -23,7 +23,7 @@ namespace SAMERIDER.Editor;
 
 public sealed class EditorView : UserControl, IEditorDialogPresenter
 {
-    private const string ProductName = "SAMERIDER v1.07: Same-sized Raster Image Divider, Editor and Recomposer";
+    private const string ProductName = "SAMERIDER v1.08: Same-sized Raster Image Divider, Editor and Recomposer";
     private const int MAX_UI_SOURCE_DIMENSION = 1024;
     private const int MAX_UI_SOURCE_PIXELS = 4_000_000;
     private const int MAX_CELL_PREVIEW_DIMENSION = 512;
@@ -185,10 +185,6 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         _backgroundImage.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
         _backgroundImage.RenderTransform = new TransformGroup { Children = { _backgroundScale, _backgroundParallax } };
         var guideRuns = _startGuide.Inlines ?? throw new InvalidOperationException("スタートガイドのテキスト領域を初期化できませんでした。");
-        guideRuns.Add(new Run("スプライトシート名") { FontWeight = FontWeight.Bold, Foreground = Brush.Parse("#FDE68A") });
-        guideRuns.Add(new Run("と"));
-        guideRuns.Add(new Run("セルサイズ") { FontWeight = FontWeight.Bold, Foreground = Brush.Parse("#FDE68A") });
-        guideRuns.Add(new Run("を入力したら、"));
         guideRuns.Add(new Run("セルをクリック") { FontWeight = FontWeight.Bold, Foreground = Brush.Parse("#FDE68A") });
         guideRuns.Add(new Run("して画像を読み込んでみましょう。\n１セルのサイズが合っていれば、単体画像でも繋がったシートでも読み込めます。"));
         Content = BuildLayout();
@@ -209,6 +205,10 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         _title.Text = _project.Title;
         _cellWidth.Text = _project.CellWidth.ToString(); _cellHeight.Text = _project.CellHeight.ToString();
         _cellCount.Text = $"セル数: {_project.Columns} × {_project.Rows}";
+        EditorToolTip.SetTip(_title, "任意のシート名。保存、PNG書き出しのデフォルト名に使用する");
+        EditorToolTip.SetTip(_cellSizeLabel, "トリミングまたは透明部分の追加により全セルのサイズを変更する。自動で最適サイズに縮小することもできる");
+        EditorToolTip.SetTip(_cellWidth, "トリミングまたは透明部分の追加により全セルのサイズを変更する。自動で最適サイズに縮小することもできる");
+        EditorToolTip.SetTip(_cellHeight, "トリミングまたは透明部分の追加により全セルのサイズを変更する。自動で最適サイズに縮小することもできる");
         _overlayOpacitySlider.PropertyChanged += (_, e) =>
         {
             if (e.Property == RangeBase.ValueProperty)
@@ -269,14 +269,30 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         EditorToolTip.SetTip(newButton, "新しいスプライトシートを作る");
         fileActions.Children.Add(newButton);
         var openButton = Button("開く", OpenProjectAsync);
-        EditorToolTip.SetTip(openButton, "既存のSAMERIDER用jsonファイルを開く");
+        EditorToolTip.SetTip(openButton, "既存のSAMERIDER用.sameriderファイルを開く（旧.jsonにも対応）");
         fileActions.Children.Add(openButton);
         var saveButton = Button("保存", SaveProjectAsAsync);
-        EditorToolTip.SetTip(saveButton, "保存場所とファイル名を指定して、\nSAMERIDER用jsonファイルに保存する。\nCtrl+Sで上書き保存も可能");
+        EditorToolTip.SetTip(saveButton, "保存場所とファイル名を指定して、\nSAMERIDER用.sameriderバンドルに保存する。\nCtrl+Sで上書き保存も可能");
         fileActions.Children.Add(saveButton);
         _pngExportButton = Button("PNGを書き出し", ExportPngAsync);
         EditorToolTip.SetTip(_pngExportButton, "作成したスプライトシートをpng画像として出力する");
         fileActions.Children.Add(_pngExportButton);
+        var aboutLink = new TextBlock
+        {
+            Text = "サメライダーとは？",
+            Foreground = Brush.Parse("#67E8F9"),
+            FontWeight = FontWeight.Bold,
+            TextDecorations = TextDecorations.Underline,
+            VerticalAlignment = VerticalAlignment.Center,
+            Cursor = new Cursor(StandardCursorType.Hand)
+        };
+        aboutLink.PointerPressed += async (_, e) =>
+        {
+            if (!e.GetCurrentPoint(aboutLink).Properties.IsLeftButtonPressed) return;
+            e.Handled = true;
+            await Dialogs.ShowAboutAsync(this);
+        };
+        fileActions.Children.Add(aboutLink);
         toolbar.Children.Add(fileActions);
         var editActions = new WrapPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         _undoButton = Button("元に戻す（Undo）", Undo);
@@ -287,11 +303,14 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         foreach (Control control in editActions.Children) control.Margin = new Thickness(4, 2);
         UpdateUndoRedoButtons();
         Grid.SetColumn(editActions, 1); toolbar.Children.Add(editActions);
+        aboutLink.Margin = new Thickness(24, 2, 4, 2);
         header.Children.Add(toolbar);
 
         var settings = new Grid { ColumnDefinitions = ColumnDefinitions.Parse("*,Auto"), VerticalAlignment = VerticalAlignment.Center };
         var settingInputs = new WrapPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        settingInputs.Children.Add(new TextBlock { Text = "スプライトシート名", VerticalAlignment = VerticalAlignment.Center }); settingInputs.Children.Add(_title);
+        var titleLabel = new TextBlock { Text = "スプライトシート名", VerticalAlignment = VerticalAlignment.Center };
+        EditorToolTip.SetTip(titleLabel, "任意のシート名。保存、PNG書き出しのデフォルト名に使用する");
+        settingInputs.Children.Add(titleLabel); settingInputs.Children.Add(_title);
         settingInputs.Children.Add(_cellSizeLabel);
         settingInputs.Children.Add(_cellWidth);
         settingInputs.Children.Add(new TextBlock { Text = "×", VerticalAlignment = VerticalAlignment.Center }); settingInputs.Children.Add(_cellHeight);
@@ -426,7 +445,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         EditorToolTip.SetTip(overlayControl, "前後のセルまたは選択中セルを重ねて表示");
         var brand = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 4, 2) };
         brand.Children.Add(_brandLogo);
-        brand.Children.Add(new TextBlock { Text = "SAMERIDER v1.07", FontSize = 15, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Right });
+        brand.Children.Add(new TextBlock { Text = "SAMERIDER v1.08", FontSize = 15, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Right });
         var brandTagline = new TextBlock
         {
             Text = "Same-sized Raster Image Divider, Editor and Recomposer", FontSize = 13,
@@ -902,11 +921,22 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
                 ? await Task.Run(() => SpriteImageService.ExportSelectedCells(bitmap, exportProject.CellWidth, exportProject.CellHeight, selectedPositions))
                 : null;
             var sourceImage = selectedImage ?? bitmap;
+            if (settings.Value.RemovePixelNoise) SetProgressStatus("セル内のピクセルごみを除去中...", isIndeterminate: true);
+            using var cleanedImage = settings.Value.RemovePixelNoise
+                ? await Task.Run(() => SpriteImageService.RemoveLowAlphaPixels(sourceImage, settings.Value.AlphaThreshold))
+                : null;
+            var imageForBleedCleanup = cleanedImage ?? sourceImage;
+            if (settings.Value.RemoveAdjacentCellBleed) SetProgressStatus("隣接セルのはみ出しを除去中...", isIndeterminate: true);
+            using var bleedCleanedImage = settings.Value.RemoveAdjacentCellBleed
+                ? await Task.Run(() => SpriteImageService.RemoveAdjacentCellBleedLines(
+                    imageForBleedCleanup, exportProject.CellWidth, exportProject.CellHeight, settings.Value.AdjacentCellBleedWidth))
+                : null;
+            var imageForQuantize = bleedCleanedImage ?? imageForBleedCleanup;
             if (settings.Value.ColorCount != 0) SetProgressStatus("PNGを減色中...", isIndeterminate: true);
             using var quantized = settings.Value.ColorCount == 0
                 ? null
-                : await Task.Run(() => SpriteImageService.Quantize(sourceImage, settings.Value.ColorCount));
-            var imageToSave = quantized ?? sourceImage;
+                : await Task.Run(() => SpriteImageService.Quantize(imageForQuantize, settings.Value.ColorCount));
+            var imageToSave = quantized ?? imageForQuantize;
             SetProgressStatus("PNGを圧縮して保存中...", isIndeterminate: true);
             await Task.Run(() => SpriteImageService.SavePng(imageToSave, path));
             var displayName = _platformServices.GetDisplayName(path);
@@ -918,7 +948,9 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
                 : $"{elapsed.TotalMilliseconds:F0} ms";
             var qualityText = settings.Value.ColorCount == 0 ? "フルカラー" : $"{settings.Value.ColorCount}色";
             var selectedOnlyText = settings.Value.SelectedOnly ? "、選択セルのみ" : string.Empty;
-            SetStatus($"書き出しました: {displayName} ({imageToSave.Width} × {imageToSave.Height}, {qualityText}{selectedOnlyText})（書き出し時間: {elapsedText}）");
+            var pixelNoiseText = settings.Value.RemovePixelNoise ? $"、ピクセルごみ除去（Alpha {settings.Value.AlphaThreshold}未満）" : string.Empty;
+            var adjacentCellBleedText = settings.Value.RemoveAdjacentCellBleed ? $"、隣接セルのはみ出し除去（{settings.Value.AdjacentCellBleedWidth}px）" : string.Empty;
+            SetStatus($"書き出しました: {displayName} ({imageToSave.Width} × {imageToSave.Height}, {qualityText}{selectedOnlyText}{pixelNoiseText}{adjacentCellBleedText})（書き出し時間: {elapsedText}）");
         }
         catch (Exception ex)
         {

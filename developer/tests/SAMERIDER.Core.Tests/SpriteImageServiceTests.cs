@@ -96,6 +96,74 @@ public sealed class SpriteImageServiceTests
     }
 
     [Fact]
+    public void FindCommonOpaqueBoundsHonorsAlphaThreshold()
+    {
+        using var workspace = new TemporaryDirectory();
+        var path = Path.Combine(workspace.Path, "assets", "alpha.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using (var source = new SKBitmap(2, 2))
+        {
+            source.Erase(SKColors.Transparent);
+            source.SetPixel(1, 0, new SKColor(255, 0, 0, 5));
+            source.SetPixel(0, 1, SKColors.Blue);
+            using var data = source.Encode(SKEncodedImageFormat.Png, 100);
+            File.WriteAllBytes(path, data.ToArray());
+        }
+        var project = new SpriteProject
+        {
+            Title = "alpha", CellWidth = 2, CellHeight = 2, Columns = 1, Rows = 1,
+            Assets = [new SpriteAsset { RelativePath = "assets/alpha.png", Width = 2, Height = 2 }],
+            Cells = [new SpriteCell { X = 0, Y = 0, AssetPath = "assets/alpha.png", SourceRect = new PixelRect(0, 0, 2, 2), DisplayName = "alpha" }]
+        };
+
+        Assert.Equal(new PixelRect(0, 0, 2, 2), SpriteImageService.FindCommonOpaqueBounds(project, workspace.Path));
+        Assert.Equal(new PixelRect(0, 1, 1, 1), SpriteImageService.FindCommonOpaqueBounds(project, workspace.Path, alphaThreshold: 5));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SpriteImageService.FindCommonOpaqueBounds(project, workspace.Path, alphaThreshold: 256));
+    }
+
+    [Fact]
+    public void RemoveLowAlphaPixelsClearsPixelsBelowThresholdOnly()
+    {
+        using var source = new SKBitmap(3, 1, SKColorType.Bgra8888, SKAlphaType.Premul);
+        source.SetPixel(0, 0, new SKColor(200, 100, 50, 49));
+        source.SetPixel(1, 0, new SKColor(200, 100, 50, 50));
+        source.SetPixel(2, 0, new SKColor(200, 100, 50, 255));
+        var sourceBelowThreshold = source.GetPixel(0, 0);
+        var sourceAtThreshold = source.GetPixel(1, 0);
+        var sourceOpaque = source.GetPixel(2, 0);
+
+        using var result = SpriteImageService.RemoveLowAlphaPixels(source, alphaThreshold: 50);
+
+        Assert.Equal(new SKColor(0, 0, 0, 0), result.GetPixel(0, 0));
+        Assert.Equal(sourceAtThreshold, result.GetPixel(1, 0));
+        Assert.Equal(sourceOpaque, result.GetPixel(2, 0));
+        Assert.Equal(sourceBelowThreshold, source.GetPixel(0, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SpriteImageService.RemoveLowAlphaPixels(source, alphaThreshold: 256));
+    }
+
+    [Fact]
+    public void RemoveAdjacentCellBleedLinesClearsOnlyIsolatedEdgeLines()
+    {
+        using var source = new SKBitmap(8, 4, SKColorType.Bgra8888, SKAlphaType.Premul);
+        source.Erase(SKColors.Transparent);
+        for (var x = 0; x < 4; x++) source.SetPixel(x, 0, SKColors.Red);
+        for (var y = 0; y < 4; y++) source.SetPixel(4, y, SKColors.Blue);
+        source.SetPixel(1, 2, SKColors.Green);
+        source.SetPixel(5, 2, SKColors.Blue);
+        source.SetPixel(5, 0, SKColors.Yellow);
+        source.SetPixel(5, 1, SKColors.Yellow);
+
+        using var result = SpriteImageService.RemoveAdjacentCellBleedLines(source, cellWidth: 4, cellHeight: 4, edgeWidth: 2);
+
+        for (var x = 0; x < 4; x++) Assert.Equal((byte)0, result.GetPixel(x, 0).Alpha);
+        for (var y = 0; y < 4; y++) Assert.Equal(SKColors.Blue, result.GetPixel(4, y));
+        Assert.Equal(SKColors.Green, result.GetPixel(1, 2));
+        Assert.Equal(SKColors.Yellow, result.GetPixel(5, 0));
+        Assert.Equal(SKColors.Yellow, result.GetPixel(5, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SpriteImageService.RemoveAdjacentCellBleedLines(source, 4, 4, -1));
+    }
+
+    [Fact]
     public async Task ProjectJsonRoundTripsWithRequiredCamelCaseFields()
     {
         using var workspace = new TemporaryDirectory();

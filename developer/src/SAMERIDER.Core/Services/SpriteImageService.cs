@@ -477,6 +477,172 @@ public static class SpriteImageService
     public static SKData EncodePng(SKBitmap bitmap) =>
         bitmap.Encode(SKEncodedImageFormat.Png, 100) ?? throw new InvalidOperationException("スプライトシートをPNG形式に変換できませんでした。");
 
+    public static unsafe SKBitmap RemoveLowAlphaPixels(SKBitmap source, int alphaThreshold, CancellationToken cancellationToken = default)
+    {
+        if (alphaThreshold is < 0 or > byte.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(alphaThreshold), "アルファ閾値は0〜255で指定してください。");
+        if (source.ColorType != SKColorType.Bgra8888 || source.AlphaType != SKAlphaType.Premul)
+            throw new ArgumentException("アルファ閾値処理の対象はBgra8888/Premul形式である必要があります。", nameof(source));
+
+        var result = new SKBitmap(source.Width, source.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+        try
+        {
+            var sourcePixels = (byte*)source.GetPixels().ToPointer();
+            var destinationPixels = (byte*)result.GetPixels().ToPointer();
+            for (var y = 0; y < source.Height; y++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var sourceRow = sourcePixels + y * source.RowBytes;
+                var destinationRow = destinationPixels + y * result.RowBytes;
+                for (var x = 0; x < source.Width; x++)
+                {
+                    var sourcePixel = sourceRow + x * 4;
+                    var destinationPixel = destinationRow + x * 4;
+                    var alpha = sourcePixel[3];
+                    if (alpha < alphaThreshold)
+                    {
+                        destinationPixel[0] = 0;
+                        destinationPixel[1] = 0;
+                        destinationPixel[2] = 0;
+                        destinationPixel[3] = 0;
+                        continue;
+                    }
+
+                    destinationPixel[0] = sourcePixel[0];
+                    destinationPixel[1] = sourcePixel[1];
+                    destinationPixel[2] = sourcePixel[2];
+                    destinationPixel[3] = alpha;
+                }
+            }
+
+            return result;
+        }
+        catch
+        {
+            result.Dispose();
+            throw;
+        }
+    }
+
+    public static unsafe SKBitmap RemoveAdjacentCellBleedLines(
+        SKBitmap source,
+        int cellWidth,
+        int cellHeight,
+        int edgeWidth,
+        CancellationToken cancellationToken = default)
+    {
+        if (cellWidth <= 0) throw new ArgumentOutOfRangeException(nameof(cellWidth));
+        if (cellHeight <= 0) throw new ArgumentOutOfRangeException(nameof(cellHeight));
+        if (edgeWidth < 0) throw new ArgumentOutOfRangeException(nameof(edgeWidth));
+        if (source.ColorType != SKColorType.Bgra8888 || source.AlphaType != SKAlphaType.Premul)
+            throw new ArgumentException("隣接セルのはみ出し処理の対象はBgra8888/Premul形式である必要があります。", nameof(source));
+
+        var result = new SKBitmap(source.Width, source.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+        try
+        {
+            var sourcePixels = (byte*)source.GetPixels().ToPointer();
+            var destinationPixels = (byte*)result.GetPixels().ToPointer();
+            for (var y = 0; y < source.Height; y++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var sourceRow = sourcePixels + y * source.RowBytes;
+                var destinationRow = destinationPixels + y * result.RowBytes;
+                for (var x = 0; x < source.Width * 4; x++) destinationRow[x] = sourceRow[x];
+            }
+
+            if (edgeWidth == 0) return result;
+
+            var visited = new bool[checked(cellWidth * cellHeight)];
+            var componentPixels = new List<int>();
+            var pending = new Stack<int>();
+            var cellColumns = (source.Width + cellWidth - 1) / cellWidth;
+            var cellRows = (source.Height + cellHeight - 1) / cellHeight;
+            for (var cellY = 0; cellY < cellRows; cellY++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var originY = cellY * cellHeight;
+                var currentCellHeight = Math.Min(cellHeight, source.Height - originY);
+                for (var cellX = 0; cellX < cellColumns; cellX++)
+                {
+                    var originX = cellX * cellWidth;
+                    var currentCellWidth = Math.Min(cellWidth, source.Width - originX);
+                    Array.Clear(visited);
+                    for (var localY = 0; localY < currentCellHeight; localY++)
+                    {
+                        var sourceRow = sourcePixels + (originY + localY) * source.RowBytes + originX * 4;
+                        for (var localX = 0; localX < currentCellWidth; localX++)
+                        {
+                            var localIndex = localY * cellWidth + localX;
+                            if (visited[localIndex] || sourceRow[(localX * 4) + 3] == 0) continue;
+
+                            visited[localIndex] = true;
+                            componentPixels.Clear();
+                            pending.Clear();
+                            pending.Push(localIndex);
+                            var minX = localX;
+                            var maxX = localX;
+                            var minY = localY;
+                            var maxY = localY;
+                            while (pending.Count > 0)
+                            {
+                                var currentIndex = pending.Pop();
+                                var currentX = currentIndex % cellWidth;
+                                var currentY = currentIndex / cellWidth;
+                                componentPixels.Add(currentIndex);
+                                minX = Math.Min(minX, currentX);
+                                maxX = Math.Max(maxX, currentX);
+                                minY = Math.Min(minY, currentY);
+                                maxY = Math.Max(maxY, currentY);
+
+                                AddAdjacent(currentX - 1, currentY);
+                                AddAdjacent(currentX + 1, currentY);
+                                AddAdjacent(currentX, currentY - 1);
+                                AddAdjacent(currentX, currentY + 1);
+                            }
+
+                            var isHorizontalLine = maxY == minY && maxX - minX + 1 >= 2 &&
+                                (maxY < edgeWidth || minY >= currentCellHeight - edgeWidth);
+                            var isVerticalLine = maxX == minX && maxY - minY + 1 >= 2 &&
+                                (maxX < edgeWidth || minX >= currentCellWidth - edgeWidth);
+                            if (!isHorizontalLine && !isVerticalLine) continue;
+
+                            foreach (var componentIndex in componentPixels)
+                            {
+                                var clearX = componentIndex % cellWidth;
+                                var clearY = componentIndex / cellWidth;
+                                var destinationPixel = destinationPixels +
+                                    (originY + clearY) * result.RowBytes + (originX + clearX) * 4;
+                                destinationPixel[0] = 0;
+                                destinationPixel[1] = 0;
+                                destinationPixel[2] = 0;
+                                destinationPixel[3] = 0;
+                            }
+                        }
+                    }
+
+                    void AddAdjacent(int adjacentX, int adjacentY)
+                    {
+                        if (adjacentX < 0 || adjacentX >= currentCellWidth || adjacentY < 0 || adjacentY >= currentCellHeight)
+                            return;
+                        var adjacentIndex = adjacentY * cellWidth + adjacentX;
+                        if (visited[adjacentIndex]) return;
+                        var adjacentRow = sourcePixels + (originY + adjacentY) * source.RowBytes + originX * 4;
+                        if (adjacentRow[(adjacentX * 4) + 3] == 0) return;
+                        visited[adjacentIndex] = true;
+                        pending.Push(adjacentIndex);
+                    }
+                }
+            }
+
+            return result;
+        }
+        catch
+        {
+            result.Dispose();
+            throw;
+        }
+    }
+
     public static unsafe SKBitmap Quantize(SKBitmap source, int maximumColors, CancellationToken cancellationToken = default)
     {
         if (maximumColors is < 2 or > 256) throw new ArgumentOutOfRangeException(nameof(maximumColors));

@@ -3,8 +3,8 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>SAMERIDER</AssemblyName>
-    <Version>1.07</Version>
-    <InformationalVersion>1.07</InformationalVersion>
+    <Version>1.08</Version>
+    <InformationalVersion>1.08</InformationalVersion>
     <ApplicationIcon>../../SAMERIDER.ico</ApplicationIcon>
     <RuntimeIdentifiers>win-x64;osx-arm64;osx-x64</RuntimeIdentifiers>
     <Nullable>enable</Nullable>
