@@ -163,7 +163,7 @@ internal static class Dialogs
             ? Math.Clamp(availableHeight - 64, 420, 580)
             : 620;
         var previewHeight = isOverlayDialog
-            ? Math.Clamp(dialogHeight - 420, 80, 160)
+            ? Math.Clamp((availableHeight > 0 ? availableHeight - 460 : 120) * 0.5, 80, 140)
             : 250;
         var window = new EditorDialogWindow
         {
@@ -172,6 +172,7 @@ internal static class Dialogs
             Height = dialogHeight,
             MinWidth = 560,
             MinHeight = Math.Min(500, dialogHeight),
+            SizeToContent = isOverlayDialog ? SizeToContent.Height : SizeToContent.Manual,
             CanResize = true,
             WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
@@ -281,7 +282,7 @@ internal static class Dialogs
 
         var content = new Grid
         {
-            RowDefinitions = RowDefinitions.Parse("Auto,Auto,*,Auto,Auto,Auto,Auto"),
+            RowDefinitions = RowDefinitions.Parse(isOverlayDialog ? "Auto,Auto,Auto,Auto,Auto,Auto,Auto" : "Auto,Auto,*,Auto,Auto,Auto,Auto"),
             Margin = new Thickness(18),
             RowSpacing = 8
         };
