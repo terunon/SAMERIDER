@@ -2260,6 +2260,7 @@ public sealed partial class EditorView : UserControl, IEditorDialogPresenter
             PushUndo();
             current.AssetPath = frame.AssetPath;
             current.SourceRect = frame.SourceRect;
+            current.SourceClipRect = null;
             current.DisplayName = frame.DisplayName;
             MarkDirty();
             RefreshCellVisual((x, y));
@@ -2283,6 +2284,7 @@ public sealed partial class EditorView : UserControl, IEditorDialogPresenter
             Y = cell.Y - _copiedCellOrigin.Y,
             AssetPath = cell.AssetPath,
             SourceRect = cell.SourceRect,
+            SourceClipRect = cell.SourceClipRect,
             OffsetX = cell.OffsetX,
             OffsetY = cell.OffsetY,
             Hue = cell.Hue, Saturation = cell.Saturation, Brightness = cell.Brightness, Contrast = cell.Contrast,
@@ -2346,6 +2348,7 @@ public sealed partial class EditorView : UserControl, IEditorDialogPresenter
                 Y = targetY + cell.Y,
                 AssetPath = cell.AssetPath,
                 SourceRect = cell.SourceRect,
+                SourceClipRect = cell.SourceClipRect,
                 OffsetX = cell.OffsetX,
                 OffsetY = cell.OffsetY,
                 Hue = cell.Hue, Saturation = cell.Saturation, Brightness = cell.Brightness, Contrast = cell.Contrast,
@@ -2499,6 +2502,7 @@ public sealed partial class EditorView : UserControl, IEditorDialogPresenter
                 {
                     cell.AssetPath = relativePath;
                     cell.SourceRect = new SAMERIDER.Core.Models.PixelRect(0, 0, _project.CellWidth, _project.CellHeight);
+                    cell.SourceClipRect = null;
                     cell.OffsetX = 0;
                     cell.OffsetY = 0;
                 }

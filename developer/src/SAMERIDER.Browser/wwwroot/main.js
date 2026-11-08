@@ -1,4 +1,4 @@
-import { dotnet } from './_framework/dotnet.js?rev=112-d595388eb0d6';
+import { dotnet } from './_framework/dotnet.js?rev=113-9832aa38ca3b';
 
 // Avalonia's browser adapter passes `types` to the File System Access API, but
 // its fallback input picker expects an `accepts` property. Normalize both paths

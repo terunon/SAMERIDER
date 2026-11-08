@@ -88,6 +88,11 @@ public static class ProjectValidator
             if ((long)cell.SourceRect.X + cell.SourceRect.Width is > int.MaxValue or < int.MinValue ||
                 (long)cell.SourceRect.Y + cell.SourceRect.Height is > int.MaxValue or < int.MinValue)
                 throw new InvalidDataException($"セルの切り出し範囲が画像外です（{cell.X + 1}, {cell.Y + 1}）。");
+            if (cell.SourceClipRect is { } clipRect &&
+                (clipRect.Width <= 0 || clipRect.Height <= 0 ||
+                 (long)clipRect.X + clipRect.Width is > int.MaxValue or < int.MinValue ||
+                 (long)clipRect.Y + clipRect.Height is > int.MaxValue or < int.MinValue))
+                throw new InvalidDataException($"セルの表示範囲が正しくありません（{cell.X + 1}, {cell.Y + 1}）。");
             if ((cell.ColorInversions & ~ColorInversion.All) != 0)
                 throw new InvalidDataException("セルの色調反転設定が正しくありません。");
             if (!float.IsFinite(cell.Hue) || !float.IsFinite(cell.Saturation) || !float.IsFinite(cell.Brightness) || !float.IsFinite(cell.Contrast) ||

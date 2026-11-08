@@ -321,10 +321,11 @@ public static class SpriteImageService
         var next = project.DeepClone();
         foreach (var cell in next.Cells)
         {
-            var rect = cell.SourceRect;
-            var deltaX = (int)Math.Floor((rect.Width - newWidth) * anchorX);
-            var deltaY = (int)Math.Floor((rect.Height - newHeight) * anchorY);
-            cell.SourceRect = new PixelRect(rect.X + deltaX, rect.Y + deltaY, newWidth, newHeight);
+            var sourceBounds = cell.SourceClipRect ?? cell.SourceRect;
+            cell.SourceClipRect = sourceBounds;
+            var deltaX = (int)Math.Floor((sourceBounds.Width - newWidth) * anchorX);
+            var deltaY = (int)Math.Floor((sourceBounds.Height - newHeight) * anchorY);
+            cell.SourceRect = new PixelRect(checked(sourceBounds.X + deltaX), checked(sourceBounds.Y + deltaY), newWidth, newHeight);
         }
         next.CellWidth = newWidth;
         next.CellHeight = newHeight;
@@ -976,15 +977,26 @@ public static class SpriteImageService
     private static void DrawCell(SKCanvas canvas, SKImage source, SpriteProject project, SpriteCell cell, float scale, SKPaint paint, float originX = 0f, float originY = 0f,
         float sourceScaleX = 1f, float sourceScaleY = 1f, SKColor? tint = null)
     {
+        if (sourceScaleX <= 0 || sourceScaleY <= 0) return;
         var sourceRect = cell.SourceRect;
-        var sourceBounds = new SKRect(sourceRect.X * sourceScaleX, sourceRect.Y * sourceScaleY,
-            (sourceRect.X + sourceRect.Width) * sourceScaleX, (sourceRect.Y + sourceRect.Height) * sourceScaleY);
-        var scaleX = scale * project.CellWidth / sourceRect.Width;
-        var scaleY = scale * project.CellHeight / sourceRect.Height;
-        var destinationLeft = originX + cell.OffsetX * scaleX;
-        var destinationTop = originY + cell.OffsetY * scaleY;
+        var clipRect = cell.SourceClipRect ?? sourceRect;
+        var sourceLeft = Math.Max(Math.Max((long)sourceRect.X, clipRect.X), 0L);
+        var sourceTop = Math.Max(Math.Max((long)sourceRect.Y, clipRect.Y), 0L);
+        var sourceRight = Math.Min(Math.Min((long)sourceRect.X + sourceRect.Width, (long)clipRect.X + clipRect.Width),
+            (long)Math.Ceiling(source.Width / (double)sourceScaleX));
+        var sourceBottom = Math.Min(Math.Min((long)sourceRect.Y + sourceRect.Height, (long)clipRect.Y + clipRect.Height),
+            (long)Math.Ceiling(source.Height / (double)sourceScaleY));
+        if (sourceRight <= sourceLeft || sourceBottom <= sourceTop) return;
+
+        var sourceBounds = new SKRect((float)(sourceLeft * sourceScaleX), (float)(sourceTop * sourceScaleY),
+            (float)(sourceRight * sourceScaleX), (float)(sourceBottom * sourceScaleY));
+        var cellScaleX = project.CellWidth / (float)sourceRect.Width;
+        var cellScaleY = project.CellHeight / (float)sourceRect.Height;
+        var destinationLeft = originX + (cell.OffsetX + (sourceLeft - sourceRect.X) * cellScaleX) * scale;
+        var destinationTop = originY + (cell.OffsetY + (sourceTop - sourceRect.Y) * cellScaleY) * scale;
         var destination = new SKRect(destinationLeft, destinationTop,
-            destinationLeft + project.CellWidth * scale, destinationTop + project.CellHeight * scale);
+            destinationLeft + (sourceRight - sourceLeft) * cellScaleX * scale,
+            destinationTop + (sourceBottom - sourceTop) * cellScaleY * scale);
         using var filter = cell.HasColorAdjustment
             ? CellEditService.CreateColorFilter(cell.Hue, cell.Saturation, cell.Brightness, cell.Contrast, cell.ColorInversions) : null;
         // Apply overlay tint inside Skia. GetPixel/SetPixel here used to cross the native boundary twice per pixel.

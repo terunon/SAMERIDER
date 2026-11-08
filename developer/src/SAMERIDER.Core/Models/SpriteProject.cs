@@ -50,6 +50,9 @@ public sealed class SpriteProject
             Y = cell.Y,
             AssetPath = cell.AssetPath,
             SourceRect = new PixelRect(cell.SourceRect.X, cell.SourceRect.Y, cell.SourceRect.Width, cell.SourceRect.Height),
+            SourceClipRect = cell.SourceClipRect is { } sourceClipRect
+                ? new PixelRect(sourceClipRect.X, sourceClipRect.Y, sourceClipRect.Width, sourceClipRect.Height)
+                : null,
             OffsetX = cell.OffsetX,
             OffsetY = cell.OffsetY,
             Hue = cell.Hue, Saturation = cell.Saturation, Brightness = cell.Brightness, Contrast = cell.Contrast,

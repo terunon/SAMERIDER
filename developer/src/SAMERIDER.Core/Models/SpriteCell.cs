@@ -6,6 +6,9 @@ public sealed class SpriteCell
     public required int Y { get; set; }
     public required string AssetPath { get; set; }
     public required PixelRect SourceRect { get; set; }
+    /// <summary>Maximum source-image area visible to this cell, preserved across repeated size changes.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public PixelRect? SourceClipRect { get; set; }
     public int OffsetX { get; set; }
     public int OffsetY { get; set; }
     public float Hue { get; set; }
