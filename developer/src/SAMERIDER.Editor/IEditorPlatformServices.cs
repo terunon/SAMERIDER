@@ -12,7 +12,7 @@ public interface IEditorPlatformServices
     StringComparison PathComparison { get; }
     bool IsCommandModifierPressed(KeyModifiers modifiers);
     Task<string?> PickProjectPathAsync(IStorageProvider storageProvider);
-    Task<string?> PickPngPathAsync(IStorageProvider storageProvider);
+    Task<string?> PickImagePathAsync(IStorageProvider storageProvider);
     Task<string?> PickSavePathAsync(IStorageProvider storageProvider, string title, string suggestedFileName, string[] extensions);
     Task<string> StageFileAsync(IStorageFile file);
     Task ReleaseTemporaryFileAsync(string path);

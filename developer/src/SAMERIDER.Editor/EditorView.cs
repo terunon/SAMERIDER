@@ -23,13 +23,16 @@ namespace SAMERIDER.Editor;
 
 public sealed class EditorView : UserControl, IEditorDialogPresenter
 {
-    private const string ProductName = "SAMERIDER v1.08: Same-sized Raster Image Divider, Editor and Recomposer";
+    private const string ProductName = "SAMERIDER v1.09: Same-sized Raster Image Divider, Editor and Recomposer";
     private const int MAX_UI_SOURCE_DIMENSION = 1024;
     private const int MAX_UI_SOURCE_PIXELS = 4_000_000;
     private const int MAX_CELL_PREVIEW_DIMENSION = 512;
     private const int MAX_SELECTED_PREVIEW_SOURCE_PIXELS = 64_000_000;
     private const double MIN_GRID_ZOOM = 0.05;
     private const double GRID_DETAIL_ZOOM_THRESHOLD = 0.4;
+    private Button? _sheetResizeButton;
+    private Button? _colorAdjustmentButton;
+    private bool _cellEditInProgress;
     private SpriteProject _project = CreateNewProject();
     private string _projectDirectory = string.Empty;
     private string? _projectPath;
@@ -202,6 +205,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         _gridVerticalScrollBar.PointerMoved += (_, e) => MoveScrollBarThumb(_gridVerticalScrollBar, _gridVerticalThumb, Orientation.Vertical, e);
         _gridHorizontalScrollBar.PointerReleased += (_, e) => EndScrollBarDrag(_gridHorizontalScrollBar, e);
         _gridVerticalScrollBar.PointerReleased += (_, e) => EndScrollBarDrag(_gridVerticalScrollBar, e);
+        _cellWidth.IsReadOnly = _project.HasSheetResize; _cellHeight.IsReadOnly = _project.HasSheetResize;
         _title.Text = _project.Title;
         _cellWidth.Text = _project.CellWidth.ToString(); _cellHeight.Text = _project.CellHeight.ToString();
         _cellCount.Text = $"セル数: {_project.Columns} × {_project.Rows}";
@@ -355,11 +359,16 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         EditorToolTip.SetTip(columnControls.Children[0], "セルの行列数を増減させる");
         EditorToolTip.SetTip(columnControls.Children[1], "セルの行列数を増減させる");
         Grid.SetColumn(columnControls, 2); Grid.SetRow(columnControls, 0); gridArea.Children.Add(columnControls);
-        var rowControls = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+        var rowControls = new WrapPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
         rowControls.Children.Add(GridSizeButton("＋", () => ChangeGridDimensionAsync(changeColumns: false, delta: 1)));
         rowControls.Children.Add(GridSizeButton("−", () => ChangeGridDimensionAsync(changeColumns: false, delta: -1)));
         EditorToolTip.SetTip(rowControls.Children[0], "セルの行列数を増減させる");
         EditorToolTip.SetTip(rowControls.Children[1], "セルの行列数を増減させる");
+        _sheetResizeButton = Button("全体サイズ変更", EditSheetSizeAsync);
+        _colorAdjustmentButton = Button("選択セルの色調変更", EditSelectedColorsAsync);
+        rowControls.Children.Add(_sheetResizeButton);
+        rowControls.Children.Add(_colorAdjustmentButton);
+        foreach (var control in rowControls.Children) control.Margin = new Thickness(4, 2);
         Grid.SetRow(rowControls, 2); gridArea.Children.Add(rowControls);
         Grid.SetRow(gridArea, 1); cellPanel.Children.Add(gridArea);
         var statusContent = new StackPanel { Spacing = 8 };
@@ -445,7 +454,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         EditorToolTip.SetTip(overlayControl, "前後のセルまたは選択中セルを重ねて表示");
         var brand = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 4, 2) };
         brand.Children.Add(_brandLogo);
-        brand.Children.Add(new TextBlock { Text = "SAMERIDER v1.08", FontSize = 15, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Right });
+        brand.Children.Add(new TextBlock { Text = "SAMERIDER v1.09", FontSize = 15, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Right });
         var brandTagline = new TextBlock
         {
             Text = "Same-sized Raster Image Divider, Editor and Recomposer", FontSize = 13,
@@ -748,7 +757,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         string? path = null;
         try
         {
-            path = await _platformServices.PickPngPathAsync(StorageProvider);
+            path = await _platformServices.PickImagePathAsync(StorageProvider);
         }
         catch (OperationCanceledException)
         {
@@ -894,6 +903,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         var projectDirectory = _projectDirectory;
         var totalCells = exportProject.Cells.Count;
         _pngExportInProgress = true;
+        UpdateCellEditButtons();
         var exportTimer = Stopwatch.StartNew();
         try
         {
@@ -960,6 +970,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         finally
         {
             _pngExportInProgress = false;
+            UpdateCellEditButtons();
             HideProgressStatus();
         }
     }
@@ -991,8 +1002,104 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         return !answer.Value || await SaveProjectAsync();
     }
 
+    private void UpdateCellEditButtons()
+    {
+        if (_sheetResizeButton is not null)
+        {
+            _sheetResizeButton.Content = _project.HasSheetResize ? "サイズ変更解除" : "全体サイズ変更";
+            _sheetResizeButton.IsEnabled = !_cellEditInProgress && !_imageImportInProgress && !_pngExportInProgress;
+        }
+        if (_colorAdjustmentButton is not null)
+        {
+            var hasSelectedImage = false;
+            var hasAdjustment = false;
+            foreach (var position in _selectedCells)
+            {
+                if (!_gridCellsByPosition.TryGetValue(position, out var cell)) continue;
+                hasSelectedImage = true;
+                if (!cell.HasColorAdjustment) continue;
+                hasAdjustment = true;
+                break;
+            }
+            _colorAdjustmentButton.Content = hasAdjustment ? "色調変更を解除" : "選択セルの色調変更";
+            _colorAdjustmentButton.IsEnabled = hasSelectedImage && !_cellEditInProgress && !_imageImportInProgress && !_pngExportInProgress;
+        }
+    }
+
+    private async Task EditSheetSizeAsync()
+    {
+        if (_cellEditInProgress || _imageImportInProgress || _pngExportInProgress) return;
+        _cellEditInProgress = true;
+        UpdateCellEditButtons();
+        try
+        {
+            var revision = _projectRevision;
+            var next = _project.DeepClone();
+            if (next.HasSheetResize) CellEditService.ResetSheetSize(next);
+            else
+            {
+                SetProgressStatus("シートプレビューを生成中...", isIndeterminate: true);
+                var directory = _projectDirectory;
+                using var preview = await Task.Run(() => CellEditService.CreatePreview(next, directory));
+                HideProgressStatus();
+                var size = await CellEditDialogs.PickSheetSizeAsync(this, preview, next.CellWidth, next.CellHeight, next.Columns, next.Rows);
+                if (size is null || size.Value == (next.CellWidth, next.CellHeight)) return;
+                CellEditService.ResizeSheet(next, size.Value.Width, size.Value.Height);
+            }
+            EnsureImportProjectUnchanged(revision);
+            PushUndo();
+            _project = next;
+            MarkDirty(); SyncFields(); RefreshAll();
+            SetStatus(_project.HasSheetResize ? "全体サイズを変更しました（Nearest Neighbor）。" : "全体サイズの変更を解除しました。");
+        }
+        catch (Exception exception) { await Dialogs.ShowErrorAsync(this, exception.Message); }
+        finally { _cellEditInProgress = false; HideProgressStatus(); UpdateCellEditButtons(); }
+    }
+
+    private async Task EditSelectedColorsAsync()
+    {
+        if (_cellEditInProgress || _imageImportInProgress || _pngExportInProgress) return;
+        var positions = _selectedCells.ToHashSet();
+        var next = _project.DeepClone();
+        var cells = next.Cells.Where(cell => positions.Contains((cell.X, cell.Y))).ToArray();
+        if (cells.Length == 0) return;
+        var revision = _projectRevision;
+        _cellEditInProgress = true;
+        UpdateCellEditButtons();
+        try
+        {
+            var reset = cells.Any(cell => cell.HasColorAdjustment);
+            (float Hue, float Saturation, float Brightness, float Contrast) values = default;
+            if (!reset)
+            {
+                SetProgressStatus("選択セルのプレビューを生成中...", isIndeterminate: true);
+                var directory = _projectDirectory;
+                using var preview = await Task.Run(() => CellEditService.CreatePreview(next, directory, positions));
+                HideProgressStatus();
+                var picked = await CellEditDialogs.PickColorAsync(this, preview);
+                if (picked is null || picked.Value == default) return;
+                values = picked.Value;
+            }
+            EnsureImportProjectUnchanged(revision);
+            foreach (var cell in cells)
+                (cell.Hue, cell.Saturation, cell.Brightness, cell.Contrast) = values;
+            ProjectValidator.Validate(next);
+            PushUndo(); _project = next;
+            MarkDirty(); RefreshAll();
+            SetStatus(reset ? "選択セルの色調変更を解除しました。" : "選択セルの色調を変更しました。");
+        }
+        catch (Exception exception) { await Dialogs.ShowErrorAsync(this, exception.Message); }
+        finally { _cellEditInProgress = false; HideProgressStatus(); UpdateCellEditButtons(); }
+    }
+
     private async Task CommitCellSizeAsync((ResizeAnchor Anchor, int Width, int Height)? suggestedResize = null)
     {
+        if (_project.HasSheetResize)
+        {
+            SyncFields();
+            SetStatus("セルの切り出しサイズを変更するには、先に「サイズ変更解除」を実行してください。");
+            return;
+        }
         if (_cellSizeCommitInProgress) return;
         _cellSizeCommitInProgress = true;
         try
@@ -1085,9 +1192,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         var columns = _project.Columns + (changeColumns ? delta : 0);
         var rows = _project.Rows + (changeColumns ? 0 : delta);
         if (columns < 1 || rows < 1) return;
-        var sheetWidth = columns * (long)_project.CellWidth;
-        var sheetHeight = rows * (long)_project.CellHeight;
-        if ((long)columns * rows > ProjectValidator.MaximumGridCellCount || sheetWidth > 16_384 || sheetHeight > 16_384 || sheetWidth * sheetHeight > ProjectValidator.MaximumSheetPixelCount)
+        if (!CanExpandGrid(columns, rows))
         {
             SetStatus("これ以上、XまたはYの分割数を増やせません。シートの上限に達します。");
             return;
@@ -1378,11 +1483,13 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         if (_imageImportInProgress || _imagePickerInProgress || _pngExportInProgress) return;
 
         _imageImportInProgress = true;
+        UpdateCellEditButtons();
         var target = (X: x, Y: y);
         _loadingImportTarget = target;
         var previousStatus = _status.Text ?? string.Empty;
         var revisionAtStart = _projectRevision;
         ImportedSprite? copiedImport = null;
+        ImportedSpriteSequence? copiedGifImport = null;
         string? copiedIntoDirectory = null;
         SKBitmap? pendingPreviewBitmap = null;
         var loadTimer = Stopwatch.StartNew();
@@ -1393,6 +1500,36 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         try
         {
             SetProgressStatus("画像情報を確認中...", isIndeterminate: true);
+            if (Path.GetExtension(sourcePath).Equals(".gif", StringComparison.OrdinalIgnoreCase))
+            {
+                copiedGifImport = await PrepareGifImportAsync(sourcePath, x, y, revisionAtStart, previousStatus);
+                if (copiedGifImport is null) return;
+                EnsureImportProjectUnchanged(revisionAtStart);
+                PushUndo();
+                _project.CellWidth = copiedGifImport.Assets[0].Width;
+                _project.CellHeight = copiedGifImport.Assets[0].Height;
+                _project.Assets.AddRange(copiedGifImport.Assets);
+                _project.Cells.RemoveAll(cell => copiedGifImport.Cells.Any(incoming => incoming.X == cell.X && incoming.Y == cell.Y));
+                _project.Cells.AddRange(copiedGifImport.Cells);
+                _project.Columns = copiedGifImport.RequiredColumns;
+                _project.Rows = copiedGifImport.RequiredRows;
+                var importedFrameCount = copiedGifImport.Cells.Count;
+                copiedGifImport = null;
+                _selectedX = x; _selectedY = y; ResetSelectionToCurrentCell(); MarkDirty(); SyncFields();
+                NormalizeSelection();
+                if (_selectAllButton is not null)
+                {
+                    _selectAllButton.Content = AreAllCellsSelected() ? "全解除" : "全選択";
+                    _selectAllButton.IsEnabled = _project.Columns != 1 || _project.Rows != 1;
+                }
+                SetProgressStatus("表示中のセルを更新中...", isIndeterminate: false, 0);
+                await RefreshGridForImportAsync();
+                SetProgressStatus("セル一覧を更新しました", isIndeterminate: false, 100);
+                RefreshPreview();
+                loadTimer.Stop();
+                SetStatus($"取り込みました: {_platformServices.GetDisplayName(sourcePath)}（{importedFrameCount}フレーム）");
+                return;
+            }
             var (imageWidth, imageHeight) = await Task.Run(() => SpriteImageService.GetPngSize(sourcePath));
             EnsureImportProjectUnchanged(revisionAtStart);
             var cellWidth = _project.CellWidth;
@@ -1450,7 +1587,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             var neededColumns = Math.Max(_project.Columns, x + tileColumns);
             var neededRows = Math.Max(_project.Rows, y + tileRows);
             var sheetWidth = neededColumns * (long)cellWidth; var sheetHeight = neededRows * (long)cellHeight;
-            if ((long)neededColumns * neededRows > ProjectValidator.MaximumGridCellCount || sheetWidth > 16_384 || sheetHeight > 16_384 || sheetWidth * sheetHeight > ProjectValidator.MaximumSheetPixelCount)
+            if ((long)neededColumns * neededRows > ProjectValidator.MaximumGridCellCount || sheetWidth > 16_384 || sheetHeight > 16_384 || sheetWidth * sheetHeight > ProjectValidator.MaximumSheetPixelCount || !CellEditService.CanRestoreSize(_project, neededColumns, neededRows))
                 throw new InvalidDataException("取り込み後のスプライトシートが大きすぎます。");
             if (!splitCountConfirmed && (neededColumns != _project.Columns || neededRows != _project.Rows))
             {
@@ -1531,6 +1668,8 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         {
             if (copiedImport is not null && copiedIntoDirectory is not null)
                 TryDeleteImportedAsset(copiedIntoDirectory, copiedImport.AssetPath);
+            if (copiedGifImport is not null)
+                foreach (var asset in copiedGifImport.Assets) TryDeleteImportedAsset(_projectDirectory, asset.RelativePath);
             pendingPreviewBitmap?.Dispose();
             SetStatus(previousStatus);
             await Dialogs.ShowErrorAsync(this, GetImageLoadFailureMessage(sourcePath, ex));
@@ -1541,8 +1680,54 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             loadTimer.Stop();
             SetCellLoading(target, false);
             _imageImportInProgress = false;
+            UpdateCellEditButtons();
             HideProgressStatus();
         }
+    }
+
+    private async Task<ImportedSpriteSequence?> PrepareGifImportAsync(string sourcePath, int x, int y, int revisionAtStart, string previousStatus)
+    {
+        var frameCount = await Task.Run(() => SpriteImageService.GetGifFrameCount(sourcePath));
+        var (imageWidth, imageHeight) = await Task.Run(() => SpriteImageService.GetGifSize(sourcePath));
+        EnsureImportProjectUnchanged(revisionAtStart);
+        var isInitialEmptyProject = _project.Columns == 1 && _project.Rows == 1 && _project.Cells.Count == 0;
+        if (!isInitialEmptyProject && (imageWidth != _project.CellWidth || imageHeight != _project.CellHeight))
+            throw new InvalidDataException($"GIFのフレームサイズ（{imageWidth} × {imageHeight} px）と現在のセルサイズ（{_project.CellWidth} × {_project.CellHeight} px）が異なります。");
+
+        var suggestedGrid = SpriteImageService.GetCompactGridSize(frameCount);
+        SetProgressStatus("GIFの配置方法を指定中...", isIndeterminate: false, 0);
+        var grid = await Dialogs.PickGifGridSizeAsync(this, sourcePath, frameCount, suggestedGrid.Columns, suggestedGrid.Rows);
+        EnsureImportProjectUnchanged(revisionAtStart);
+        if (grid is null) { SetStatus(previousStatus); return null; }
+        var cellWidth = isInitialEmptyProject ? imageWidth : _project.CellWidth;
+        var cellHeight = isInitialEmptyProject ? imageHeight : _project.CellHeight;
+        var requiredColumns = Math.Max(_project.Columns, checked(x + grid.Value.Columns));
+        var requiredRows = Math.Max(_project.Rows, checked(y + grid.Value.Rows));
+        var sheetWidth = requiredColumns * (long)cellWidth;
+        var sheetHeight = requiredRows * (long)cellHeight;
+        if ((long)requiredColumns * requiredRows > ProjectValidator.MaximumGridCellCount || sheetWidth > 16_384 || sheetHeight > 16_384 || sheetWidth * sheetHeight > ProjectValidator.MaximumSheetPixelCount || !CellEditService.CanRestoreSize(_project, requiredColumns, requiredRows))
+            throw new InvalidDataException("GIFを配置するとスプライトシートが大きくなりすぎます。");
+        if (!isInitialEmptyProject && (requiredColumns != _project.Columns || requiredRows != _project.Rows))
+        {
+            var yes = await Dialogs.ConfirmAsync(this, "セル一覧を拡張しますか？",
+                $"GIFを配置するには分割数を {_project.Columns}×{_project.Rows} から {requiredColumns}×{requiredRows} に拡張する必要があります。拡張しますか？", "拡張して配置");
+            EnsureImportProjectUnchanged(revisionAtStart);
+            if (!yes) { SetStatus(previousStatus); return null; }
+        }
+        var occupied = _project.Cells.Where(cell => cell.X >= x && cell.X < x + grid.Value.Columns && cell.Y >= y && cell.Y < y + grid.Value.Rows).ToArray();
+        if (occupied.Length > 0)
+        {
+            var overwrite = await Dialogs.ConfirmAsync(this, "セルを置き換えますか？", "配置先にある画像は置き換えられます。続行しますか？", "置き換える");
+            EnsureImportProjectUnchanged(revisionAtStart);
+            if (!overwrite) { SetStatus(previousStatus); return null; }
+        }
+
+        var importProject = _project.DeepClone();
+        importProject.CellWidth = cellWidth;
+        importProject.CellHeight = cellHeight;
+        SetProgressStatus("GIFを連番PNGに変換中...", isIndeterminate: true);
+        return await Task.Run(() => SpriteImageService.ImportGifFrames(sourcePath, _projectDirectory, importProject,
+            x, y, grid.Value.Columns, grid.Value.Rows));
     }
 
     private void EnsureImportProjectUnchanged(int revisionAtStart)
@@ -2007,6 +2192,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             SourceRect = cell.SourceRect,
             OffsetX = cell.OffsetX,
             OffsetY = cell.OffsetY,
+            Hue = cell.Hue, Saturation = cell.Saturation, Brightness = cell.Brightness, Contrast = cell.Contrast,
             DisplayName = cell.DisplayName
         }).ToArray();
         SetStatus($"{cells.Length}セルをコピーしました。");
@@ -2068,6 +2254,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
                 SourceRect = cell.SourceRect,
                 OffsetX = cell.OffsetX,
                 OffsetY = cell.OffsetY,
+                Hue = cell.Hue, Saturation = cell.Saturation, Brightness = cell.Brightness, Contrast = cell.Contrast,
                 DisplayName = cell.DisplayName
             });
         }
@@ -2086,7 +2273,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         if (columns <= 0 || rows <= 0 || (long)columns * rows > ProjectValidator.MaximumGridCellCount) return false;
         var sheetWidth = (long)_project.CellWidth * columns;
         var sheetHeight = (long)_project.CellHeight * rows;
-        return sheetWidth <= 16_384 && sheetHeight <= 16_384 && sheetWidth * sheetHeight <= ProjectValidator.MaximumSheetPixelCount;
+        return sheetWidth <= 16_384 && sheetHeight <= 16_384 && sheetWidth * sheetHeight <= ProjectValidator.MaximumSheetPixelCount && CellEditService.CanRestoreSize(_project, columns, rows);
     }
 
     private bool CanTransformSelectedLines(IReadOnlySet<(int X, int Y)> positions, bool horizontal, bool insert)
@@ -2586,6 +2773,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
 
     private void RefreshPreview()
     {
+        UpdateCellEditButtons();
         _updatePreviewViewport?.Invoke();
         UpdatePngExportButtonState();
         _previewCrosshairPinned = false;
@@ -2726,7 +2914,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
     private OverlayCellCacheKey CreateOverlayCellCacheKey(SpriteCell cell, SKColor tint) => new(
         cell.X, cell.Y, cell.AssetPath,
         cell.SourceRect.X, cell.SourceRect.Y, cell.SourceRect.Width, cell.SourceRect.Height,
-        cell.OffsetX, cell.OffsetY,
+        cell.OffsetX, cell.OffsetY, cell.Hue, cell.Saturation, cell.Brightness, cell.Contrast,
         // Cell size changes alter the thumbnail dimensions even when the cell
         // metadata itself remains unchanged.
         _project.CellWidth, _project.CellHeight,
@@ -3057,6 +3245,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
 
     private void SyncFields()
     {
+        _cellWidth.IsReadOnly = _project.HasSheetResize; _cellHeight.IsReadOnly = _project.HasSheetResize;
         _title.Text = _project.Title; _cellWidth.Text = _project.CellWidth.ToString(); _cellHeight.Text = _project.CellHeight.ToString();
         _cellCount.Text = $"セル数: {_project.Columns} × {_project.Rows}";
     }
@@ -3382,7 +3571,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
     private readonly record struct OverlayCellCacheKey(
         int X, int Y, string AssetPath,
         int SourceX, int SourceY, int SourceWidth, int SourceHeight,
-        int OffsetX, int OffsetY,
+        int OffsetX, int OffsetY, float Hue, float Saturation, float Brightness, float Contrast,
         int CellWidth, int CellHeight,
         byte TintRed, byte TintGreen, byte TintBlue);
 

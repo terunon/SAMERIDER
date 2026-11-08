@@ -4,6 +4,7 @@ using SAMERIDER.Core.Models;
 namespace SAMERIDER.Core.Services;
 
 public sealed record ImportedSprite(string AssetPath, int Width, int Height, IReadOnlyList<SpriteCell> Cells, int RequiredColumns, int RequiredRows);
+public sealed record ImportedSpriteSequence(IReadOnlyList<SpriteAsset> Assets, IReadOnlyList<SpriteCell> Cells, int RequiredColumns, int RequiredRows);
 
 public static class SpriteImageService
 {
@@ -46,6 +47,150 @@ public static class SpriteImageService
         if (codec.EncodedFormat != SKEncodedImageFormat.Png)
             throw new InvalidDataException($"画像デコーダーがPNG以外の形式として認識しました（{codec.EncodedFormat}）。PNGとして保存し直してください。");
         return (codec.Info.Width, codec.Info.Height);
+    }
+
+    public static IReadOnlyList<byte[]> CreateGifPreviewFrames(string path)
+    {
+        var count = GetGifFrameCount(path);
+        using var codec = SKCodec.Create(path) ?? throw new InvalidDataException("GIFを解析できません。");
+        var info = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+        if (info.Width <= 0 || info.Height <= 0 || info.Width > 16_384 || info.Height > 16_384 || (long)info.Width * info.Height > ProjectValidator.MaximumSheetPixelCount)
+            throw new InvalidDataException("GIFの画像サイズが大きすぎます。");
+        var scale = Math.Min(1d, 64d / Math.Max(info.Width, info.Height));
+        var thumbnailInfo = new SKImageInfo(Math.Max(1, (int)(info.Width * scale)), Math.Max(1, (int)(info.Height * scale)));
+        var frames = new List<byte[]>(count);
+        for (var index = 0; index < count; index++)
+        {
+            using var frame = new SKBitmap(info);
+            if (codec.GetPixels(info, frame.GetPixels(), new SKCodecOptions(index, -1)) != SKCodecResult.Success)
+                throw new InvalidDataException($"GIFの{index + 1}フレーム目を読み込めません。");
+            using var thumbnail = new SKBitmap(thumbnailInfo);
+            using (var canvas = new SKCanvas(thumbnail))
+            {
+                canvas.Clear(SKColors.Transparent);
+                canvas.DrawBitmap(frame, new SKRect(0, 0, thumbnail.Width, thumbnail.Height));
+            }
+            using var png = thumbnail.Encode(SKEncodedImageFormat.Png, 100);
+            frames.Add(png.ToArray());
+        }
+        return frames;
+    }
+
+    public static int GetGifFrameCount(string path)
+    {
+        if (!string.Equals(Path.GetExtension(path), ".gif", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("GIFファイルを選択してください。");
+        using var codec = SKCodec.Create(path) ?? throw new InvalidDataException("GIFを解析できません。画像が破損している可能性があります。");
+        if (codec.EncodedFormat != SKEncodedImageFormat.Gif)
+            throw new InvalidDataException("選択したファイルはGIF形式ではありません。");
+        var frameCount = Math.Max(1, codec.FrameCount);
+        if (frameCount > ProjectValidator.MaximumGridCellCount)
+            throw new InvalidDataException($"GIFのフレーム数が上限（{ProjectValidator.MaximumGridCellCount}）を超えています。");
+        return frameCount;
+    }
+
+    public static (int Columns, int Rows) GetCompactGridSize(int itemCount)
+    {
+        if (itemCount <= 0) throw new ArgumentOutOfRangeException(nameof(itemCount));
+        var bestColumns = itemCount;
+        var bestRows = 1;
+        var bestArea = (long)itemCount;
+        var bestDifference = Math.Abs(bestColumns - bestRows);
+        for (var columns = 1; columns <= itemCount; columns++)
+        {
+            var rows = (itemCount + columns - 1) / columns;
+            var area = (long)columns * rows;
+            var difference = Math.Abs(columns - rows);
+            if (area < bestArea || area == bestArea && difference < bestDifference)
+            {
+                bestColumns = columns;
+                bestRows = rows;
+                bestArea = area;
+                bestDifference = difference;
+            }
+        }
+        return (bestColumns, bestRows);
+    }
+
+    public static (int Width, int Height) GetGifSize(string path)
+    {
+        _ = GetGifFrameCount(path);
+        using var codec = SKCodec.Create(path) ?? throw new InvalidDataException("GIFを解析できません。画像が破損している可能性があります。");
+        return (codec.Info.Width, codec.Info.Height);
+    }
+
+    public static ImportedSpriteSequence ImportGifFrames(string sourcePath, string projectDirectory, SpriteProject project,
+        int startX, int startY, int columns, int rows)
+    {
+        ProjectValidator.Validate(project);
+        if (columns <= 0 || rows <= 0 || (long)columns * rows > ProjectValidator.MaximumGridCellCount)
+            throw new InvalidDataException("GIFフレームの配置列数・行数が正しくありません。");
+        if (startX < 0 || startY < 0 || startX >= ProjectValidator.MaximumGridCellCount || startY >= ProjectValidator.MaximumGridCellCount)
+            throw new ArgumentOutOfRangeException(nameof(startX), "配置先セルが正しくありません。");
+        var frameCount = GetGifFrameCount(sourcePath);
+        if ((long)project.Assets.Count + frameCount > ProjectValidator.MaximumGridCellCount)
+            throw new InvalidDataException($"GIFを追加すると画像ファイル数の上限（{ProjectValidator.MaximumGridCellCount}）を超えます。");
+        if ((long)columns * rows < frameCount)
+            throw new InvalidDataException("指定したセル数がGIFのフレーム数より少なくなっています。");
+        using var codec = SKCodec.Create(sourcePath) ?? throw new InvalidDataException("GIFを解析できません。画像が破損している可能性があります。");
+        var width = codec.Info.Width;
+        var height = codec.Info.Height;
+        if (width != project.CellWidth || height != project.CellHeight)
+            throw new InvalidDataException($"GIFのフレームサイズ（{width} × {height} px）を現在のセルサイズ（{project.CellWidth} × {project.CellHeight} px）に合わせてください。");
+        var neededColumns = Math.Max(project.Columns, checked(startX + columns));
+        var neededRows = Math.Max(project.Rows, checked(startY + rows));
+        if ((long)neededColumns * neededRows > ProjectValidator.MaximumGridCellCount ||
+            (long)neededColumns * width > 16_384 || (long)neededRows * height > 16_384 ||
+            (long)neededColumns * width * neededRows * height > ProjectValidator.MaximumSheetPixelCount ||
+            !CellEditService.CanRestoreSize(project, neededColumns, neededRows))
+            throw new InvalidDataException("GIFを配置するとスプライトシートが大きくなりすぎます。");
+
+        var assetsDirectory = Path.Combine(projectDirectory, ProjectValidator.ImportRootDirectoryName, project.ImportFolderName);
+        Directory.CreateDirectory(assetsDirectory);
+        var baseName = Path.GetFileNameWithoutExtension(sourcePath);
+        var assets = new List<SpriteAsset>(frameCount);
+        var cells = new List<SpriteCell>(frameCount);
+        var createdPaths = new List<string>(frameCount);
+        try
+        {
+            var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
+            for (var frameIndex = 0; frameIndex < frameCount; frameIndex++)
+            {
+                using var bitmap = new SKBitmap(info);
+                var options = new SKCodecOptions(frameIndex, -1);
+                var decodeResult = codec.GetPixels(info, bitmap.GetPixels(), options);
+                if (decodeResult != SKCodecResult.Success)
+                    throw new InvalidDataException($"GIFの{frameIndex + 1}フレーム目を読み込めません: {GetGifDecodeFailureMessage(decodeResult)}");
+                using var png = bitmap.Encode(SKEncodedImageFormat.Png, 100)
+                    ?? throw new InvalidDataException($"GIFの{frameIndex + 1}フレーム目をPNGに変換できません。");
+                var requestedName = $"{baseName}_{frameIndex + 1:000}.png";
+                var fileName = GetUniqueFileName(assetsDirectory, requestedName);
+                var destination = Path.Combine(assetsDirectory, fileName);
+                File.WriteAllBytes(destination, png.ToArray());
+                createdPaths.Add(destination);
+                var relativePath = $"{ProjectValidator.ImportRootDirectoryName}/{project.ImportFolderName}/{fileName}";
+                assets.Add(new SpriteAsset { RelativePath = relativePath, Width = width, Height = height });
+                cells.Add(new SpriteCell
+                {
+                    X = startX + frameIndex % columns,
+                    Y = startY + frameIndex / columns,
+                    AssetPath = relativePath,
+                    SourceRect = new PixelRect(0, 0, width, height),
+                    DisplayName = $"{baseName}_{frameIndex + 1:000}"
+                });
+            }
+        }
+        catch
+        {
+            foreach (var createdPath in createdPaths)
+            {
+                try { File.Delete(createdPath); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+            throw;
+        }
+        return new ImportedSpriteSequence(assets, cells, neededColumns, neededRows);
     }
 
     public static (int Width, int Height) GetPngSize(ReadOnlyMemory<byte> pngBytes)
@@ -274,33 +419,10 @@ public static class SpriteImageService
         var output = new SKBitmap(project.CellWidth, project.CellHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
         output.Erase(SKColors.Transparent);
         if (cell is null || source is null) return output;
-        var sourceRect = cell.SourceRect;
-        if (tint is null)
-        {
-            using var canvas = new SKCanvas(output);
-            using var paint = new SKPaint();
-            using var image = SKImage.FromBitmap(source);
-            DrawCell(canvas, image, cell, 1f, paint);
-            return output;
-        }
-        for (var y = 0; y < project.CellHeight; y++)
-        for (var x = 0; x < project.CellWidth; x++)
-        {
-            var sx = (long)sourceRect.X + x - cell.OffsetX;
-            var sy = (long)sourceRect.Y + y - cell.OffsetY;
-            if (sx < 0 || sy < 0 || sx >= source.Width || sy >= source.Height) continue;
-            var color = source.GetPixel((int)sx, (int)sy);
-            if (tint is { } shade)
-            {
-                const float colorBlend = 0.28f;
-                color = new SKColor(
-                    (byte)(color.Red + (shade.Red - color.Red) * colorBlend),
-                    (byte)(color.Green + (shade.Green - color.Green) * colorBlend),
-                    (byte)(color.Blue + (shade.Blue - color.Blue) * colorBlend),
-                    (byte)(color.Alpha * shade.Alpha / 255));
-            }
-            output.SetPixel(x, y, color);
-        }
+        using (var canvas = new SKCanvas(output))
+        using (var paint = new SKPaint())
+        using (var image = SKImage.FromBitmap(source))
+            DrawCell(canvas, image, project, cell, 1f, paint, tint: tint);
         return output;
     }
 
@@ -315,21 +437,8 @@ public static class SpriteImageService
         using var canvas = new SKCanvas(output);
         using var paint = new SKPaint();
         using var image = SKImage.FromBitmap(source);
-        DrawCell(canvas, image, cell, scale, paint, sourceScaleX: sourceScaleX, sourceScaleY: sourceScaleY);
+        DrawCell(canvas, image, project, cell, scale, paint, sourceScaleX: sourceScaleX, sourceScaleY: sourceScaleY, tint: tint);
         canvas.Flush();
-        if (tint is { } shade)
-        {
-            for (var y = 0; y < output.Height; y++)
-            for (var x = 0; x < output.Width; x++)
-            {
-                var color = output.GetPixel(x, y);
-                output.SetPixel(x, y, new SKColor(
-                    (byte)(color.Red + (shade.Red - color.Red) * 0.28f),
-                    (byte)(color.Green + (shade.Green - color.Green) * 0.28f),
-                    (byte)(color.Blue + (shade.Blue - color.Blue) * 0.28f),
-                    (byte)(color.Alpha * shade.Alpha / 255)));
-            }
-        }
         return output;
     }
 
@@ -356,7 +465,7 @@ public static class SpriteImageService
                     var tileTop = cell.Y * project.CellHeight;
                     canvas.Save();
                     canvas.ClipRect(new SKRect(tileLeft, tileTop, tileLeft + project.CellWidth, tileTop + project.CellHeight));
-                    DrawCell(canvas, image, cell, 1f, paint, tileLeft, tileTop);
+                    DrawCell(canvas, image, project, cell, 1f, paint, tileLeft, tileTop);
                     canvas.Restore();
                     completedCells++;
                     if (completedCells == totalCells || completedCells % reportInterval == 0) cellProgress?.Report(completedCells);
@@ -403,7 +512,7 @@ public static class SpriteImageService
                     var tileTop = cell.Y * project.CellHeight;
                     canvas.Save();
                     canvas.ClipRect(new SKRect(tileLeft, tileTop, tileLeft + project.CellWidth, tileTop + project.CellHeight));
-                    DrawCell(canvas, image, cell, 1f, paint, tileLeft, tileTop);
+                    DrawCell(canvas, image, project, cell, 1f, paint, tileLeft, tileTop);
                     canvas.Restore();
                     completedCells++;
                     if (completedCells == totalCells || completedCells % reportInterval == 0)
@@ -810,6 +919,18 @@ public static class SpriteImageService
         _ => $"PNGデコードに失敗しました（デコーダー結果: {result}）。画像が破損しているか、未対応のPNG形式の可能性があります。"
     };
 
+    private static string GetGifDecodeFailureMessage(SKCodecResult result) => result switch
+    {
+        SKCodecResult.IncompleteInput => "GIFデータが途中で終わっています。ファイルが不完全または破損している可能性があります。",
+        SKCodecResult.ErrorInInput => "GIFデータの読み取り中にデコードエラーが発生しました。ファイルが破損している可能性があります。",
+        SKCodecResult.InvalidInput => "GIFの内容が無効です。ファイルが破損している可能性があります。",
+        SKCodecResult.InvalidConversion => "GIFの色形式をPNGへ変換できません。画像編集ソフトで保存し直してください。",
+        SKCodecResult.InvalidParameters => "GIFデコーダーが画像サイズまたはピクセル形式を受け付けませんでした。",
+        SKCodecResult.CouldNotRewind => "GIFデータを先頭から読み直せませんでした。",
+        SKCodecResult.InternalError => "GIFデコーダー内部でエラーが発生しました。",
+        _ => $"GIFデコードに失敗しました（デコーダー結果: {result}）。ファイルが破損しているか、未対応の形式の可能性があります。"
+    };
+
     private static (SKBitmap Bitmap, float ScaleX, float ScaleY) DecodeAtOriginalSizeAndScale(
         string path, SKImageInfo targetInfo, int originalWidth, int originalHeight)
     {
@@ -846,17 +967,33 @@ public static class SpriteImageService
         return candidate;
     }
 
-    private static void DrawCell(SKCanvas canvas, SKImage source, SpriteCell cell, float scale, SKPaint paint, float originX = 0f, float originY = 0f,
-        float sourceScaleX = 1f, float sourceScaleY = 1f)
+    private static void DrawCell(SKCanvas canvas, SKImage source, SpriteProject project, SpriteCell cell, float scale, SKPaint paint, float originX = 0f, float originY = 0f,
+        float sourceScaleX = 1f, float sourceScaleY = 1f, SKColor? tint = null)
     {
         var sourceRect = cell.SourceRect;
         var sourceBounds = new SKRect(sourceRect.X * sourceScaleX, sourceRect.Y * sourceScaleY,
             (sourceRect.X + sourceRect.Width) * sourceScaleX, (sourceRect.Y + sourceRect.Height) * sourceScaleY);
-        var destinationLeft = originX + cell.OffsetX * scale;
-        var destinationTop = originY + cell.OffsetY * scale;
+        var scaleX = scale * project.CellWidth / sourceRect.Width;
+        var scaleY = scale * project.CellHeight / sourceRect.Height;
+        var destinationLeft = originX + cell.OffsetX * scaleX;
+        var destinationTop = originY + cell.OffsetY * scaleY;
         var destination = new SKRect(destinationLeft, destinationTop,
-            destinationLeft + sourceRect.Width * scale, destinationTop + sourceRect.Height * scale);
-        canvas.DrawImage(source, sourceBounds, destination, new SKSamplingOptions(SKFilterMode.Linear), paint);
+            destinationLeft + project.CellWidth * scale, destinationTop + project.CellHeight * scale);
+        using var filter = cell.HasColorAdjustment
+            ? CellEditService.CreateColorFilter(cell.Hue, cell.Saturation, cell.Brightness, cell.Contrast) : null;
+        // Apply overlay tint inside Skia. GetPixel/SetPixel here used to cross the native boundary twice per pixel.
+        using var tintFilter = tint is { } shade ? SKColorFilter.CreateColorMatrix(
+        [
+            .72f, 0, 0, 0, shade.Red / 255f * .28f,
+            0, .72f, 0, 0, shade.Green / 255f * .28f,
+            0, 0, .72f, 0, shade.Blue / 255f * .28f,
+            0, 0, 0, shade.Alpha / 255f, 0
+        ]) : null;
+        using var composedFilter = filter is not null && tintFilter is not null
+            ? SKColorFilter.CreateCompose(tintFilter, filter) : null;
+        paint.ColorFilter = composedFilter ?? tintFilter ?? filter;
+        canvas.DrawImage(source, sourceBounds, destination, new SKSamplingOptions(SKFilterMode.Nearest), paint);
+        paint.ColorFilter = null;
     }
 
     private static (double X, double Y) GetAnchorPosition(ResizeAnchor anchor) => anchor switch
@@ -871,6 +1008,7 @@ public static class SpriteImageService
     {
         target.FormatVersion = source.FormatVersion; target.Title = source.Title;
         target.CellWidth = source.CellWidth; target.CellHeight = source.CellHeight;
+        target.OriginalCellWidth = source.OriginalCellWidth; target.OriginalCellHeight = source.OriginalCellHeight;
         target.Columns = source.Columns; target.Rows = source.Rows;
         target.Assets = source.Assets; target.Cells = source.Cells;
     }

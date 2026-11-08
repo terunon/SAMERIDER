@@ -37,12 +37,12 @@ internal sealed class DesktopEditorPlatformServices : IEditorPlatformServices
         return files.FirstOrDefault()?.Path.LocalPath;
     }
 
-    public async Task<string?> PickPngPathAsync(IStorageProvider storageProvider)
+    public async Task<string?> PickImagePathAsync(IStorageProvider storageProvider)
     {
         var files = await storageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "PNG画像を取り込む", AllowMultiple = false,
-            FileTypeFilter = [new FilePickerFileType("PNG画像") { Patterns = ["*.png"] }]
+            Title = "画像を取り込む", AllowMultiple = false,
+            FileTypeFilter = [new FilePickerFileType("PNG / GIF画像") { Patterns = ["*.png", "*.gif"] }]
         });
         return files.FirstOrDefault()?.Path.LocalPath;
     }

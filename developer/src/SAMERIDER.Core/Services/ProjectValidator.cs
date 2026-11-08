@@ -46,6 +46,12 @@ public static class ProjectValidator
         if ((long)project.Columns * project.Rows > MaximumGridCellCount || sheetWidth > 16_384 || sheetHeight > 16_384 || sheetWidth * sheetHeight > MaximumSheetPixelCount)
             throw new InvalidDataException("スプライトシートが大きすぎます。セルサイズまたは分割数を小さくしてください。");
 
+        if (project.OriginalCellWidth < 0 || project.OriginalCellHeight < 0 ||
+            (project.OriginalCellWidth == 0) != (project.OriginalCellHeight == 0) ||
+            project.OriginalCellWidth > 16_384 || project.OriginalCellHeight > 16_384)
+            throw new InvalidDataException("サイズ変更前のセルサイズが正しくありません。");
+        if (!CellEditService.CanRestoreSize(project, project.Columns, project.Rows))
+            throw new InvalidDataException("サイズ変更解除後のシートが上限を超えます。分割数を小さくしてください。");
         var assets = new HashSet<string>(StringComparer.Ordinal);
         foreach (var asset in project.Assets)
         {
@@ -77,11 +83,14 @@ public static class ProjectValidator
                 throw new InvalidDataException($"同じセルに複数の画像が割り当てられています（{cell.X + 1}, {cell.Y + 1}）。");
             if (!assets.Contains(cell.AssetPath))
                 throw new InvalidDataException($"セルが未登録の画像を参照しています: {cell.AssetPath}");
-            if (cell.SourceRect.Width != project.CellWidth || cell.SourceRect.Height != project.CellHeight)
-                throw new InvalidDataException($"セルの切り出し範囲と現在のセルサイズが一致しません（{cell.X + 1}, {cell.Y + 1}）。");
+            if (cell.SourceRect.Width <= 0 || cell.SourceRect.Height <= 0)
+                throw new InvalidDataException($"セルの切り出し範囲が正しくありません（{cell.X + 1}, {cell.Y + 1}）。");
             if ((long)cell.SourceRect.X + cell.SourceRect.Width is > int.MaxValue or < int.MinValue ||
                 (long)cell.SourceRect.Y + cell.SourceRect.Height is > int.MaxValue or < int.MinValue)
                 throw new InvalidDataException($"セルの切り出し範囲が画像外です（{cell.X + 1}, {cell.Y + 1}）。");
+            if (!float.IsFinite(cell.Hue) || !float.IsFinite(cell.Saturation) || !float.IsFinite(cell.Brightness) || !float.IsFinite(cell.Contrast) ||
+                Math.Abs(cell.Hue) > 180 || Math.Abs(cell.Saturation) > 100 || Math.Abs(cell.Brightness) > 100 || Math.Abs(cell.Contrast) > 100)
+                throw new InvalidDataException("セルの色調設定が正しくありません。");
             if (string.IsNullOrWhiteSpace(cell.DisplayName))
                 throw new InvalidDataException("セル名を空にすることはできません。");
         }

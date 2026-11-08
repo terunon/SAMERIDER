@@ -14,6 +14,109 @@ namespace SAMERIDER.Editor;
 
 internal static class Dialogs
 {
+    public static async Task<(int Columns, int Rows)?> PickGifGridSizeAsync(Control owner, string sourcePath, int frameCount, int initialColumns, int initialRows)
+    {
+        var window = new EditorDialogWindow
+        {
+            Title = "GIFフレームの配置", Width = 520, SizeToContent = SizeToContent.Height,
+            CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+        var previewBytes = await Task.Run(() => SpriteImageService.CreateGifPreviewFrames(sourcePath));
+        var previews = new List<Bitmap>();
+        try
+        {
+            foreach (var bytes in previewBytes)
+            {
+                using var stream = new MemoryStream(bytes);
+                previews.Add(new Bitmap(stream));
+            }
+            var previewCanvas = new Canvas { Width = 440, Height = 280, ClipToBounds = true };
+            var previewBorder = new Border
+            {
+                Background = Brush.Parse("#30343B"), BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1),
+                HorizontalAlignment = HorizontalAlignment.Center, Child = previewCanvas
+            };
+            var columnsInput = new TextBox { Text = initialColumns.ToString(), Width = 72, HorizontalContentAlignment = HorizontalAlignment.Center };
+            var rowsInput = new TextBox { Text = initialRows.ToString(), Width = 72, HorizontalContentAlignment = HorizontalAlignment.Center };
+            var countLabel = new TextBlock { Text = $"GIFのフレーム数: {frameCount}セル", HorizontalAlignment = HorizontalAlignment.Center };
+            var validation = new TextBlock { HorizontalAlignment = HorizontalAlignment.Center, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12, 4) };
+            var ok = CenteredButton("読み込む", 100, isDefault: true);
+            var cancel = CenteredButton("キャンセル", 100, isCancel: true);
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Spacing = 8, Margin = new Thickness(12) };
+            buttons.Children.Add(ok);
+            buttons.Children.Add(cancel);
+            var fields = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Spacing = 8, Margin = new Thickness(12, 4) };
+            fields.Children.Add(new TextBlock { Text = "横（列）", VerticalAlignment = VerticalAlignment.Center });
+            fields.Children.Add(columnsInput);
+            fields.Children.Add(new TextBlock { Text = "×", VerticalAlignment = VerticalAlignment.Center });
+            fields.Children.Add(new TextBlock { Text = "縦（行）", VerticalAlignment = VerticalAlignment.Center });
+            fields.Children.Add(rowsInput);
+            var content = new StackPanel { Spacing = 4, Margin = new Thickness(14) };
+            content.Children.Add(countLabel);
+            content.Children.Add(fields);
+            content.Children.Add(validation);
+            content.Children.Add(previewBorder);
+            content.Children.Add(new TextBlock
+            {
+                Text = "配置順は左上から右へ、行末から次の行へ進みます。空きセルはそのまま残ります。",
+                TextWrapping = TextWrapping.Wrap, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(8, 2)
+            });
+            content.Children.Add(buttons);
+            window.Content = content;
+            (int Columns, int Rows)? selected = null;
+            void ValidateGrid()
+            {
+                var hasColumns = int.TryParse(columnsInput.Text, out var columns);
+                var hasRows = int.TryParse(rowsInput.Text, out var rows);
+                var valid = hasColumns && columns > 0 && hasRows && rows > 0 &&
+                            (long)columns * rows >= frameCount && (long)columns * rows <= ProjectValidator.MaximumGridCellCount;
+                previewCanvas.Children.Clear();
+                if (valid)
+                {
+                    var aspect = (double)previews[0].PixelSize.Width / previews[0].PixelSize.Height;
+                    var cellSize = Math.Min(440d / (columns * aspect), 280d / rows);
+                    var cellWidth = cellSize * aspect;
+                    var offsetX = (440 - columns * cellWidth) / 2;
+                    var offsetY = (280 - rows * cellSize) / 2;
+                    for (var index = 0; index < previews.Count; index++)
+                    {
+                        var tile = new Border
+                        {
+                            Width = cellWidth, Height = cellSize, BorderBrush = Brushes.Gray,
+                            BorderThickness = new Thickness(0.5),
+                            Child = new Image { Source = previews[index], Stretch = Stretch.Uniform }
+                        };
+                        Canvas.SetLeft(tile, offsetX + index % columns * cellWidth);
+                        Canvas.SetTop(tile, offsetY + index / columns * cellSize);
+                        previewCanvas.Children.Add(tile);
+                    }
+                }
+                ok.IsEnabled = valid;
+                validation.Text = valid
+                    ? $"配置セル数: {columns * (long)rows}（フレームが収まります）"
+                    : $"列・行を1以上で指定し、合計を{frameCount}〜{ProjectValidator.MaximumGridCellCount}セルにしてください。";
+                validation.Foreground = valid ? Brushes.LightGreen : Brushes.Orange;
+            }
+            columnsInput.TextChanged += (_, _) => ValidateGrid();
+            rowsInput.TextChanged += (_, _) => ValidateGrid();
+            ok.Click += (_, _) =>
+            {
+                ValidateGrid();
+                if (!ok.IsEnabled || !int.TryParse(columnsInput.Text, out var columns) || !int.TryParse(rowsInput.Text, out var rows)) return;
+                selected = (columns, rows);
+                window.Close();
+            };
+            cancel.Click += (_, _) => window.Close();
+            ValidateGrid();
+            await window.ShowDialog(owner);
+            return selected;
+        }
+        finally
+        {
+            foreach (var preview in previews) preview.Dispose();
+        }
+    }
+
     public static async Task<(int ColorCount, bool SelectedOnly, bool RemovePixelNoise, int AlphaThreshold, bool RemoveAdjacentCellBleed, int AdjacentCellBleedWidth)?> PickPngExportSettingsAsync(
         Control owner,
         SKBitmap source,

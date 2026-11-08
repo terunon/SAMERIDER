@@ -15,6 +15,10 @@ public sealed class SpriteProject
     }
     public int CellWidth { get; set; } = 64;
     public int CellHeight { get; set; } = 64;
+    public int OriginalCellWidth { get; set; }
+    public int OriginalCellHeight { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasSheetResize => OriginalCellWidth > 0 && OriginalCellHeight > 0;
     public int Columns { get; set; } = 8;
     public int Rows { get; set; } = 4;
     public List<SpriteAsset> Assets { get; set; } = [];
@@ -27,6 +31,8 @@ public sealed class SpriteProject
         ImportFolderName = ImportFolderName,
         CellWidth = CellWidth,
         CellHeight = CellHeight,
+        OriginalCellWidth = OriginalCellWidth,
+        OriginalCellHeight = OriginalCellHeight,
         Columns = Columns,
         Rows = Rows,
         Assets = Assets.Select(asset => new SpriteAsset
@@ -43,6 +49,7 @@ public sealed class SpriteProject
             SourceRect = new PixelRect(cell.SourceRect.X, cell.SourceRect.Y, cell.SourceRect.Width, cell.SourceRect.Height),
             OffsetX = cell.OffsetX,
             OffsetY = cell.OffsetY,
+            Hue = cell.Hue, Saturation = cell.Saturation, Brightness = cell.Brightness, Contrast = cell.Contrast,
             DisplayName = cell.DisplayName
         }).ToList()
     };

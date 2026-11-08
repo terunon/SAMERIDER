@@ -62,14 +62,14 @@ public sealed class SpriteImageServiceTests
     }
 
     [Fact]
-    public void ImportRejectsNonIntegerImageSizeAndNonAsciiName()
+    public void ImportRejectsNonIntegerImageSizeAndAcceptsUnicodeName()
     {
         using var workspace = new TemporaryDirectory();
         var project = new SpriteProject { Title = "safe", CellWidth = 4, CellHeight = 4, Columns = 4, Rows = 4 };
         var wrongSize = WritePng(workspace.Path, "wrong.png", 5, 4);
         Assert.Throws<InvalidDataException>(() => SpriteImageService.ImportPng(wrongSize, workspace.Path, project, 0, 0));
         var nonAscii = WritePng(workspace.Path, "キャラ.png", 4, 4);
-        Assert.Throws<InvalidDataException>(() => SpriteImageService.ImportPng(nonAscii, workspace.Path, project, 0, 0));
+        Assert.Equal("キャラ.png", SpriteImageService.ImportPng(nonAscii, workspace.Path, project, 0, 0).Cells[0].DisplayName);
         var single = WritePng(workspace.Path, "idle.png", 4, 4);
         Assert.Equal("idle.png", SpriteImageService.ImportPng(single, workspace.Path, project, 0, 0).Cells[0].DisplayName);
     }
