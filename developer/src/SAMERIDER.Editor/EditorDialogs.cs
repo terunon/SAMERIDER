@@ -157,13 +157,21 @@ internal static class Dialogs
         Func<bool, Task<string?>> exportUnityMeta)
     {
         int[] colorOptions = [4, 8, 16, 32, 64, 128, 256, 0];
+        var isOverlayDialog = TopLevel.GetTopLevel(owner) is not Window;
+        var availableHeight = owner.Bounds.Height;
+        var dialogHeight = isOverlayDialog && availableHeight > 0
+            ? Math.Clamp(availableHeight - 64, 420, 580)
+            : 620;
+        var previewHeight = isOverlayDialog
+            ? Math.Clamp(dialogHeight - 420, 80, 160)
+            : 250;
         var window = new EditorDialogWindow
         {
             Title = "PNG書き出し設定",
             Width = 720,
-            Height = 620,
+            Height = dialogHeight,
             MinWidth = 560,
-            MinHeight = 500,
+            MinHeight = Math.Min(500, dialogHeight),
             CanResize = true,
             WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
@@ -237,7 +245,7 @@ internal static class Dialogs
         adjacentCellBleedSettings.Children.Add(new TextBlock { Text = "幅", VerticalAlignment = VerticalAlignment.Center });
         adjacentCellBleedSettings.Children.Add(adjacentCellBleedWidthInput);
         adjacentCellBleedSettings.Children.Add(new TextBlock { Text = "px", VerticalAlignment = VerticalAlignment.Center });
-        var previewImage = new Image { Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 480, MaxHeight = 220 };
+        var previewImage = new Image { Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 480, MaxHeight = Math.Max(48, previewHeight - 20) };
         var previewFrame = new Border
         {
             BorderBrush = Brush.Parse("#606A78"),
@@ -245,7 +253,7 @@ internal static class Dialogs
             CornerRadius = new CornerRadius(4),
             Background = Brush.Parse("#20242B"),
             Padding = new Thickness(8),
-            MaxHeight = 250,
+            MaxHeight = previewHeight,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             Child = previewImage

@@ -23,13 +23,31 @@ internal sealed class BrowserEditorPlatformServices : IEditorPlatformServices
 
     public async Task<string?> PickProjectPathAsync(IStorageProvider storageProvider)
     {
+        FilePickerFileType[] projectFileTypes =
+        {
+            new("SAMERIDERプロジェクト (*.samerider)")
+            {
+                Patterns = ["*.samerider"],
+                MimeTypes = ["application/octet-stream"]
+            },
+            new("JSONプロジェクト (*.json)")
+            {
+                Patterns = ["*.json"],
+                MimeTypes = ["application/json"]
+            }
+        };
         var files = await storageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = "SAMERIDERプロジェクトを開く", AllowMultiple = false,
-            FileTypeFilter = [new FilePickerFileType("SAMERIDERプロジェクト") { Patterns = ["*.json", "*.samerider"] }]
+            SuggestedFileType = projectFileTypes[0],
+            FileTypeFilter = projectFileTypes
         });
         var file = files.FirstOrDefault();
         if (file is null) return null;
+        var projectExtension = Path.GetExtension(file.Name);
+        if (!projectExtension.Equals(".json", StringComparison.OrdinalIgnoreCase) &&
+            !projectExtension.Equals(".samerider", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException(".samerider または .json ファイルを選択してください。");
         var projectPath = await StageFileAsync(file);
         if (!Path.GetExtension(file.Name).Equals(".json", StringComparison.OrdinalIgnoreCase)) return projectPath;
 
@@ -42,10 +60,12 @@ internal sealed class BrowserEditorPlatformServices : IEditorPlatformServices
             foreach (var asset in project.Assets)
             {
                 var assetName = Path.GetFileName(asset.RelativePath);
+                var pngFileType = new FilePickerFileType("PNG画像") { Patterns = ["*.png"], MimeTypes = ["image/png"] };
                 var imageFiles = await storageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
                 {
                     Title = $"参照画像を選択: {assetName}", AllowMultiple = false,
-                    FileTypeFilter = [new FilePickerFileType("PNG画像") { Patterns = ["*.png"] }]
+                    SuggestedFileType = pngFileType,
+                    FileTypeFilter = [pngFileType]
                 });
                 var imageFile = imageFiles.FirstOrDefault();
                 if (imageFile is null)
@@ -55,6 +75,8 @@ internal sealed class BrowserEditorPlatformServices : IEditorPlatformServices
                 }
                 if (!Path.GetFileName(imageFile.Name).Equals(assetName, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException($"「{asset.RelativePath}」には「{assetName}」を選択してください（選択されたファイル: {imageFile.Name}）。");
+                if (!Path.GetExtension(imageFile.Name).Equals(".png", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("参照画像にはPNGファイルを選択してください。");
                 var stagedAssetPath = ProjectValidator.ResolveAssetPath(Path.GetDirectoryName(projectPath)!, asset.RelativePath);
                 Directory.CreateDirectory(Path.GetDirectoryName(stagedAssetPath)!);
                 var stagedAsset = await StageFileAtPathAsync(imageFile, stagedAssetPath, MaximumPngBytes);
@@ -82,13 +104,24 @@ internal sealed class BrowserEditorPlatformServices : IEditorPlatformServices
 
     public async Task<string?> PickImagePathAsync(IStorageProvider storageProvider)
     {
+        FilePickerFileType[] imageFileTypes =
+        {
+            new("PNG画像 (*.png)") { Patterns = ["*.png"], MimeTypes = ["image/png"] },
+            new("GIFアニメーション (*.gif)") { Patterns = ["*.gif"], MimeTypes = ["image/gif"] }
+        };
         var files = await storageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = "画像を取り込む", AllowMultiple = false,
-            FileTypeFilter = [new FilePickerFileType("PNG / GIF画像") { Patterns = ["*.png", "*.gif"] }]
+            SuggestedFileType = imageFileTypes[0],
+            FileTypeFilter = imageFileTypes
         });
         var file = files.FirstOrDefault();
-        return file is null ? null : await StageFileAsync(file);
+        if (file is null) return null;
+        var extension = Path.GetExtension(file.Name);
+        if (!extension.Equals(".png", StringComparison.OrdinalIgnoreCase) &&
+            !extension.Equals(".gif", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("PNGまたはGIFファイルを選択してください。");
+        return await StageFileAsync(file);
     }
 
     public async Task<string?> PickUnityMetaPathAsync(IStorageProvider storageProvider, string pngFileName)
@@ -106,8 +139,11 @@ internal sealed class BrowserEditorPlatformServices : IEditorPlatformServices
             {
                 await StageFileAtPathAsync(file, path, MaximumUnityMetaBytes);
             }
-            catch (NotSupportedException)
+            catch (Exception exception) when (exception is not OperationCanceledException)
             {
+                // Browser save handles may not expose the existing destination for reading.
+                // JS-backed storage providers can also surface a missing new file as a JS exception;
+                // an empty seed lets metadata generation proceed, and CommitFileAsync reports write failures.
                 await using var emptyFile = File.Create(path);
                 _displayNames[path] = file.Name;
             }
@@ -127,10 +163,16 @@ internal sealed class BrowserEditorPlatformServices : IEditorPlatformServices
         var isUnityMeta = extensions.Contains(".meta", StringComparer.OrdinalIgnoreCase);
         var extension = isProject ? ".samerider" : extensions[0];
         var suggestedName = isUnityMeta ? suggestedFileName : Path.ChangeExtension(suggestedFileName, extension);
+        var outputFileType = new FilePickerFileType(isProject ? "SAMERIDERプロジェクトbundle" : isUnityMeta ? "Unityメタデータ" : "PNG画像")
+        {
+            Patterns = [$"*{extension}"],
+            MimeTypes = [isProject ? "application/octet-stream" : isUnityMeta ? "text/plain" : "image/png"]
+        };
         var file = await storageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title = title, SuggestedFileName = suggestedName, DefaultExtension = extension.TrimStart('.'),
-            FileTypeChoices = [new FilePickerFileType(isProject ? "SAMERIDERプロジェクトbundle" : isUnityMeta ? "Unityメタデータ" : "PNG画像") { Patterns = [$"*{extension}"] }]
+            SuggestedFileType = outputFileType,
+            FileTypeChoices = [outputFileType]
         });
         if (file is null) return null;
         if (extensions.Contains(".png", StringComparer.OrdinalIgnoreCase) &&
