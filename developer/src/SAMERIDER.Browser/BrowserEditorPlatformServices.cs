@@ -139,7 +139,7 @@ internal sealed class BrowserEditorPlatformServices : IEditorPlatformServices
             {
                 await StageFileAtPathAsync(file, path, MaximumUnityMetaBytes);
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
+            catch (Exception exception) when (exception is NotSupportedException or IOException or UnauthorizedAccessException or System.Runtime.InteropServices.JavaScript.JSException)
             {
                 // Browser save handles may not expose the existing destination for reading.
                 // JS-backed storage providers can also surface a missing new file as a JS exception;
