@@ -47,6 +47,9 @@ internal sealed class DesktopEditorPlatformServices : IEditorPlatformServices
         return files.FirstOrDefault()?.Path.LocalPath;
     }
 
+    public Task<string?> PickUnityMetaPathAsync(IStorageProvider storageProvider, string pngFileName) =>
+        PickSavePathAsync(storageProvider, "Unity用.metaを書き出す", pngFileName + ".meta", [".meta"]);
+
     public async Task<string?> PickSavePathAsync(IStorageProvider storageProvider, string title, string suggestedFileName, string[] extensions)
     {
         var suggestedExtension = Path.GetExtension(suggestedFileName).TrimStart('.');

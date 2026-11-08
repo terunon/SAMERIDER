@@ -10,6 +10,7 @@ internal sealed class BrowserEditorPlatformServices : IEditorPlatformServices
 {
     private const int MaximumPngBytes = 128 * 1024 * 1024;
     private const long MaximumLegacyProjectAssetBytes = 512L * 1024 * 1024;
+    private const long MaximumUnityMetaBytes = 32L * 1024 * 1024;
     private readonly Dictionary<string, IStorageFile> _pendingOutputs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _displayNames = new(StringComparer.Ordinal);
 
@@ -90,15 +91,46 @@ internal sealed class BrowserEditorPlatformServices : IEditorPlatformServices
         return file is null ? null : await StageFileAsync(file);
     }
 
+    public async Task<string?> PickUnityMetaPathAsync(IStorageProvider storageProvider, string pngFileName)
+    {
+        var expectedFileName = pngFileName + ".meta";
+        var path = await PickSavePathAsync(storageProvider, "Unity用.metaを書き出す", expectedFileName, [".meta"]);
+        if (path is null) return null;
+
+        if (!_pendingOutputs.TryGetValue(path, out var file))
+            throw new InvalidOperationException(".meta保存先の一時ファイルを取得できませんでした。");
+
+        try
+        {
+            try
+            {
+                await StageFileAtPathAsync(file, path, MaximumUnityMetaBytes);
+            }
+            catch (NotSupportedException)
+            {
+                await using var emptyFile = File.Create(path);
+                _displayNames[path] = file.Name;
+            }
+        }
+        catch
+        {
+            await ReleaseTemporaryFileAsync(path);
+            throw;
+        }
+
+        return path;
+    }
+
     public async Task<string?> PickSavePathAsync(IStorageProvider storageProvider, string title, string suggestedFileName, string[] extensions)
     {
         var isProject = extensions.Contains(".samerider", StringComparer.OrdinalIgnoreCase);
+        var isUnityMeta = extensions.Contains(".meta", StringComparer.OrdinalIgnoreCase);
         var extension = isProject ? ".samerider" : extensions[0];
-        var suggestedName = Path.ChangeExtension(suggestedFileName, extension);
+        var suggestedName = isUnityMeta ? suggestedFileName : Path.ChangeExtension(suggestedFileName, extension);
         var file = await storageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title = title, SuggestedFileName = suggestedName, DefaultExtension = extension.TrimStart('.'),
-            FileTypeChoices = [new FilePickerFileType(isProject ? "SAMERIDERプロジェクトbundle" : "PNG画像") { Patterns = [$"*{extension}"] }]
+            FileTypeChoices = [new FilePickerFileType(isProject ? "SAMERIDERプロジェクトbundle" : isUnityMeta ? "Unityメタデータ" : "PNG画像") { Patterns = [$"*{extension}"] }]
         });
         if (file is null) return null;
         if (extensions.Contains(".png", StringComparer.OrdinalIgnoreCase) &&
@@ -154,6 +186,13 @@ internal sealed class BrowserEditorPlatformServices : IEditorPlatformServices
 
     public Task ReleaseTemporaryFileAsync(string path)
     {
+        if (_pendingOutputs.Remove(path))
+        {
+            _displayNames.Remove(path);
+            if (File.Exists(path)) File.Delete(path);
+            return Task.CompletedTask;
+        }
+
         var inputDirectory = Path.GetDirectoryName(path);
         if (inputDirectory is not null && inputDirectory.StartsWith(Path.Combine(WorkspaceDirectory, "input") + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
             Directory.Exists(inputDirectory))

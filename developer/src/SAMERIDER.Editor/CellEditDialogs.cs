@@ -6,6 +6,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using SAMERIDER.Core.Services;
+using SAMERIDER.Core.Models;
 using SkiaSharp;
 
 namespace SAMERIDER.Editor;
@@ -104,20 +105,42 @@ internal static class CellEditDialogs
         finally { previewBitmap.Dispose(); }
     }
 
-    public static async Task<(float Hue, float Saturation, float Brightness, float Contrast)?> PickColorAsync(Control owner, SKBitmap preview)
+    public static async Task<(float Hue, float Saturation, float Brightness, float Contrast, ColorInversion Inversions)?> PickColorAsync(Control owner, SKBitmap preview)
     {
-        var window = new EditorDialogWindow { Title = "色調整", Width = 600, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        var window = new EditorDialogWindow { Title = "色調整", Width = 700, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
         var image = new Image { Width = 520, Height = 280, Stretch = Stretch.Uniform };
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(60) };
         var values = new[] { 0f, 0f, 0f, 0f };
         var sliders = new Slider[4];
         var valueLabels = new TextBlock[4];
+        var inversionChecks = new CheckBox[4];
+        ColorInversion[] inversionFlags = [ColorInversion.Hue, ColorInversion.Saturation, ColorInversion.Brightness, ColorInversion.Contrast];
+        string[] inversionTips =
+        [
+            "色相の反転\n色相の調整後、色相をさらに180°回転して補色側の色にします。\n鮮やかさや明暗ではなく、色の種類を反転する機能です。透明度は変わりません。",
+            "彩度の反転\n彩度の調整後、鮮やかさを逆転します。鮮やかな色は無彩色寄りに、くすんだ色は鮮やかになります。\n色相を持たない中間のグレーには赤系の色が付きます。黒・白・透明度は変わりません。",
+            "明るさの反転（ネガポジ）\nすべての色調整後、RGBを「255 − RGB」に反転します。明るさを＋にした効果も反転され、暗くなる方向に働きます。\n明るさの調整値が0なら、コントラスト反転と同じ結果です。透明度は変わりません。",
+            "コントラストの反転\n明暗の関係を反転してから、明るさの調整値を加えます。明るさが＋なら、その分は明るくなります。\n明るさ反転は「明るさの調整後に反転」する点が異なります。明るさの調整値が0なら同じ結果です。透明度は変わりません。"
+        ];
+        ColorInversion GetInversions()
+        {
+            var result = ColorInversion.None;
+            for (var index = 0; index < inversionChecks.Length; index++)
+                if (inversionChecks[index].IsChecked == true) result |= inversionFlags[index];
+            return result;
+        }
         var names = new[] { "色相", "彩度", "明るさ", "コントラスト" };
         var ranges = new[] { (-180d, 180d), (-100d, 100d), (-100d, 100d), (-100d, 100d) };
         for (var index = 0; index < sliders.Length; index++)
         {
             sliders[index] = new Slider { Minimum = ranges[index].Item1, Maximum = ranges[index].Item2, Value = 0, TickFrequency = 1, Width = 320 };
-            valueLabels[index] = new TextBlock { Text = "0", Width = 42, TextAlignment = TextAlignment.Right };
+            valueLabels[index] = new TextBlock { Text = "0", Width = 42, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+            inversionChecks[index] = new CheckBox { Content = "反転", IsChecked = false, VerticalAlignment = VerticalAlignment.Center };
+            EditorToolTip.SetTip(inversionChecks[index], inversionTips[index]);
+            inversionChecks[index].PropertyChanged += (_, args) =>
+            {
+                if (args.Property == ToggleButton.IsCheckedProperty && !timer.IsEnabled) timer.Start();
+            };
         }
         var rowsPanel = new StackPanel { Spacing = 4, Margin = new Thickness(6, 0) };
         for (var index = 0; index < sliders.Length; index++)
@@ -127,6 +150,7 @@ internal static class CellEditDialogs
             row.Children.Add(new TextBlock { Text = names[index], Width = 100, VerticalAlignment = VerticalAlignment.Center });
             row.Children.Add(sliders[index]);
             row.Children.Add(valueLabels[index]);
+            row.Children.Add(inversionChecks[index]);
             rowsPanel.Children.Add(row);
             sliders[index].PropertyChanged += (_, args) =>
             {
@@ -142,9 +166,15 @@ internal static class CellEditDialogs
         buttons.Children.Add(ok); buttons.Children.Add(cancel);
         var content = new StackPanel { Spacing = 8, Margin = new Thickness(14) };
         content.Children.Add(new Border { BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1), Child = image });
-        content.Children.Add(rowsPanel); content.Children.Add(buttons);
+        content.Children.Add(rowsPanel);
+        content.Children.Add(new TextBlock
+        {
+            Text = "明るさの反転でネガポジ反転できます。透明度は変わりません。",
+            FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center, TextWrapping = TextWrapping.Wrap
+        });
+        content.Children.Add(buttons);
         window.Content = content;
-        (float Hue, float Saturation, float Brightness, float Contrast)? selected = null;
+        (float Hue, float Saturation, float Brightness, float Contrast, ColorInversion Inversions)? selected = null;
         var sample = CreateBoundedPreview(preview, 512, 320);
         var initialData = EncodePng(sample);
         using (initialData)
@@ -154,7 +184,7 @@ internal static class CellEditDialogs
         timer.Tick += (_, _) =>
         {
             timer.Stop();
-            var adjusted = CellEditService.AdjustColors(sample, values[0], values[1], values[2], values[3]);
+            var adjusted = CellEditService.AdjustColors(sample, values[0], values[1], values[2], values[3], GetInversions());
             try
             {
                 using var data = EncodePng(adjusted);
@@ -166,7 +196,7 @@ internal static class CellEditDialogs
             }
             finally { adjusted.Dispose(); }
         };
-        ok.Click += (_, _) => { selected = (values[0], values[1], values[2], values[3]); window.Close(); };
+        ok.Click += (_, _) => { selected = (values[0], values[1], values[2], values[3], GetInversions()); window.Close(); };
         cancel.Click += (_, _) => window.Close();
         try
         {

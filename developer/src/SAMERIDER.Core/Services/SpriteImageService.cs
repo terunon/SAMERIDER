@@ -151,6 +151,7 @@ public static class SpriteImageService
         var assets = new List<SpriteAsset>(frameCount);
         var cells = new List<SpriteCell>(frameCount);
         var createdPaths = new List<string>(frameCount);
+        var sequenceId = Guid.NewGuid().ToString("N");
         try
         {
             var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
@@ -169,14 +170,19 @@ public static class SpriteImageService
                 File.WriteAllBytes(destination, png.ToArray());
                 createdPaths.Add(destination);
                 var relativePath = $"{ProjectValidator.ImportRootDirectoryName}/{project.ImportFolderName}/{fileName}";
-                assets.Add(new SpriteAsset { RelativePath = relativePath, Width = width, Height = height });
+                var displayName = $"{baseName}_{frameIndex + 1:000}";
+                assets.Add(new SpriteAsset
+                {
+                    RelativePath = relativePath, Width = width, Height = height,
+                    SequenceId = sequenceId, SequenceIndex = frameIndex + 1, SequenceDisplayName = displayName
+                });
                 cells.Add(new SpriteCell
                 {
                     X = startX + frameIndex % columns,
                     Y = startY + frameIndex / columns,
                     AssetPath = relativePath,
                     SourceRect = new PixelRect(0, 0, width, height),
-                    DisplayName = $"{baseName}_{frameIndex + 1:000}"
+                    DisplayName = displayName
                 });
             }
         }
@@ -980,7 +986,7 @@ public static class SpriteImageService
         var destination = new SKRect(destinationLeft, destinationTop,
             destinationLeft + project.CellWidth * scale, destinationTop + project.CellHeight * scale);
         using var filter = cell.HasColorAdjustment
-            ? CellEditService.CreateColorFilter(cell.Hue, cell.Saturation, cell.Brightness, cell.Contrast) : null;
+            ? CellEditService.CreateColorFilter(cell.Hue, cell.Saturation, cell.Brightness, cell.Contrast, cell.ColorInversions) : null;
         // Apply overlay tint inside Skia. GetPixel/SetPixel here used to cross the native boundary twice per pixel.
         using var tintFilter = tint is { } shade ? SKColorFilter.CreateColorMatrix(
         [

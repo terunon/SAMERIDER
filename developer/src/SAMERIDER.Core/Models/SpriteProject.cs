@@ -39,7 +39,10 @@ public sealed class SpriteProject
         {
             RelativePath = asset.RelativePath,
             Width = asset.Width,
-            Height = asset.Height
+            Height = asset.Height,
+            SequenceId = asset.SequenceId,
+            SequenceIndex = asset.SequenceIndex,
+            SequenceDisplayName = asset.SequenceDisplayName
         }).ToList(),
         Cells = Cells.Select(cell => new SpriteCell
         {
@@ -50,6 +53,7 @@ public sealed class SpriteProject
             OffsetX = cell.OffsetX,
             OffsetY = cell.OffsetY,
             Hue = cell.Hue, Saturation = cell.Saturation, Brightness = cell.Brightness, Contrast = cell.Contrast,
+            ColorInversions = cell.ColorInversions,
             DisplayName = cell.DisplayName
         }).ToList()
     };

@@ -12,7 +12,8 @@ public sealed class SpriteCell
     public float Saturation { get; set; }
     public float Brightness { get; set; }
     public float Contrast { get; set; }
+    public ColorInversion ColorInversions { get; set; }
     [System.Text.Json.Serialization.JsonIgnore]
-    public bool HasColorAdjustment => Hue != 0 || Saturation != 0 || Brightness != 0 || Contrast != 0;
+    public bool HasColorAdjustment => Hue != 0 || Saturation != 0 || Brightness != 0 || Contrast != 0 || ColorInversions != ColorInversion.None;
     public required string DisplayName { get; set; }
 }

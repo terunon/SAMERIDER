@@ -13,6 +13,7 @@ public interface IEditorPlatformServices
     bool IsCommandModifierPressed(KeyModifiers modifiers);
     Task<string?> PickProjectPathAsync(IStorageProvider storageProvider);
     Task<string?> PickImagePathAsync(IStorageProvider storageProvider);
+    Task<string?> PickUnityMetaPathAsync(IStorageProvider storageProvider, string pngFileName);
     Task<string?> PickSavePathAsync(IStorageProvider storageProvider, string title, string suggestedFileName, string[] extensions);
     Task<string> StageFileAsync(IStorageFile file);
     Task ReleaseTemporaryFileAsync(string path);

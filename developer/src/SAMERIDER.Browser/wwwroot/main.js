@@ -1,4 +1,4 @@
-import { dotnet } from './_framework/dotnet.js?rev=109-497e4cf64c';
+import { dotnet } from './_framework/dotnet.js?rev=109-0b88531993';
 
 // Avalonia's file-input picker waits for a `change` event, which browsers do not
 // emit when the user cancels the picker. Resolve that pending operation so the

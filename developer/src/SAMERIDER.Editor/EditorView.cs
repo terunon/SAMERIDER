@@ -21,7 +21,7 @@ using SAMERIDER.Core.Services;
 
 namespace SAMERIDER.Editor;
 
-public sealed class EditorView : UserControl, IEditorDialogPresenter
+public sealed partial class EditorView : UserControl, IEditorDialogPresenter
 {
     private const string ProductName = "SAMERIDER v1.09: Same-sized Raster Image Divider, Editor and Recomposer";
     private const int MAX_UI_SOURCE_DIMENSION = 1024;
@@ -161,8 +161,8 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
     private readonly TextBlock _offsetReadout = new()
     {
         Text = "X +0, Y +0", FontSize = 13, FontWeight = FontWeight.SemiBold,
-        Foreground = Brush.Parse("#FDE68A"), HorizontalAlignment = HorizontalAlignment.Right,
-        VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, -17, 0, 0),
+        Foreground = Brush.Parse("#FDE68A"), HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment = VerticalAlignment.Center,
         IsHitTestVisible = false
     };
     private readonly IEditorPlatformServices _platformServices;
@@ -251,6 +251,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         }, RoutingStrategies.Tunnel, handledEventsToo: true);
         DetachedFromVisualTree += (_, _) =>
         {
+            StopSequencePlayback();
             ClearSourceCache();
             DisposeGridVisuals();
             if (_brandLogo.Source is IDisposable logo) logo.Dispose();
@@ -387,7 +388,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         };
         var previewHeading = new TextBlock { Text = "プレビュー", FontSize = 20, FontWeight = FontWeight.SemiBold };
         EditorToolTip.SetTip(previewHeading, "方向キーで選択セルの表示位置を調整。\n左クリックで補助線を固定し、範囲を選んでトリミング。\n画像データは変更せず、座標情報のみ保存");
-        previewPanel.Children.Add(previewHeading);
+        previewPanel.Children.Add(BuildSequencePreviewHeading(previewHeading));
         var previewFrame = new Border { BorderBrush = Brush.Parse("#3F4652"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Background = Brush.Parse("#171A20"), Width = 340, Height = 340, MinHeight = 0, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, ClipToBounds = true, Padding = new Thickness(12) };
         Grid.SetRow(previewFrame, 1);
         EditorToolTip.SetTip(previewFrame, "方向キーで選択セルの表示位置を調整。\n左クリックで補助線を固定し、範囲を選んでトリミング。\n画像データは変更せず、座標情報のみ保存");
@@ -436,7 +437,6 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         previewImageSlot.SizeChanged += (_, _) => UpdatePreviewViewport();
         previewPanel.SizeChanged += (_, _) => UpdatePreviewViewport();
         previewImageSlot.Children.Add(previewFrame);
-        previewImageSlot.Children.Add(_offsetReadout);
         Grid.SetRow(previewImageSlot, 1); previewPanel.Children.Add(previewImageSlot);
         var nav = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Spacing = 12, VerticalAlignment = VerticalAlignment.Center };
         var previousButton = Button("←", () => Navigate(-1), 42);
@@ -465,7 +465,14 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         previewHost.Children.Add(previewPanel);
         var bottomTools = new Grid { ColumnDefinitions = ColumnDefinitions.Parse("Auto,*"), RowDefinitions = RowDefinitions.Parse("Auto,Auto"), VerticalAlignment = VerticalAlignment.Bottom };
         var offsetPad = BuildOffsetPad();
-        Grid.SetColumn(offsetPad, 0); Grid.SetRowSpan(offsetPad, 2); bottomTools.Children.Add(offsetPad);
+        offsetPad.HorizontalAlignment = HorizontalAlignment.Center;
+        var offsetTools = new StackPanel
+        {
+            Spacing = 6, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom
+        };
+        offsetTools.Children.Add(offsetPad);
+        offsetTools.Children.Add(_offsetReadout);
+        Grid.SetColumn(offsetTools, 0); bottomTools.Children.Add(offsetTools);
         Grid.SetColumn(brand, 1); Grid.SetRow(brand, 0); bottomTools.Children.Add(brand);
         Grid.SetRow(brandTagline, 1); Grid.SetColumnSpan(brandTagline, 2); bottomTools.Children.Add(brandTagline);
         Grid.SetRow(bottomTools, 1); previewHost.Children.Add(bottomTools);
@@ -905,6 +912,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         _pngExportInProgress = true;
         UpdateCellEditButtons();
         var exportTimer = Stopwatch.StartNew();
+        string? path = null;
         try
         {
             SetProgressStatus("PNGセルをプレビュー用に合成中...", isIndeterminate: false, 0);
@@ -919,12 +927,34 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
 
             var selectedPositions = _selectedCells.ToArray();
             var settings = await Dialogs.PickPngExportSettingsAsync(
-                this, bitmap, exportProject.CellWidth, exportProject.CellHeight, selectedPositions, selectedPositions.Length > 1);
+                this, bitmap, exportProject.CellWidth, exportProject.CellHeight, selectedPositions, selectedPositions.Length > 1, async selectedOnly =>
+                {
+                    string? output = null;
+                    try
+                    {
+                        output = await _platformServices.PickUnityMetaPathAsync(StorageProvider, exportProject.Title + ".png");
+                        if (output is null) return null;
+                        var name = _platformServices.GetDisplayName(output);
+                        if (!name.EndsWith(".png.meta", StringComparison.OrdinalIgnoreCase))
+                            throw new InvalidDataException("PNG名に対応する.png.metaという名前で保存してください。");
+                        var columns = selectedOnly ? selectedPositions.Max(p => p.X) - selectedPositions.Min(p => p.X) + 1 : bitmap.Width / exportProject.CellWidth;
+                        var rows = selectedOnly ? selectedPositions.Max(p => p.Y) - selectedPositions.Min(p => p.Y) + 1 : bitmap.Height / exportProject.CellHeight;
+                        var existing = File.Exists(output) ? await File.ReadAllTextAsync(output) : null;
+                        var meta = UnitySpriteMetaService.Generate(name[..^5], exportProject.CellWidth, exportProject.CellHeight, columns, rows, existing);
+                        await File.WriteAllTextAsync(output, meta);
+                        await _platformServices.CommitFileAsync(output);
+                        return name;
+                    }
+                    finally
+                    {
+                        if (output is not null) await _platformServices.ReleaseTemporaryFileAsync(output);
+                    }
+                });
             if (settings is null) return;
-            var path = await _platformServices.PickSavePathAsync(StorageProvider,
+            path = await _platformServices.PickSavePathAsync(StorageProvider,
                 "スプライトシートPNGを書き出す", _project.Title + ".png", [".png"]);
             if (path is null) return;
-
+            var displayName = _platformServices.GetDisplayName(path);
             exportTimer.Restart();
             if (settings.Value.SelectedOnly) SetProgressStatus("選択セルだけを抽出中...", isIndeterminate: true);
             using var selectedImage = settings.Value.SelectedOnly
@@ -949,7 +979,6 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             var imageToSave = quantized ?? imageForQuantize;
             SetProgressStatus("PNGを圧縮して保存中...", isIndeterminate: true);
             await Task.Run(() => SpriteImageService.SavePng(imageToSave, path));
-            var displayName = _platformServices.GetDisplayName(path);
             await _platformServices.CommitFileAsync(path);
             exportTimer.Stop();
             var elapsed = exportTimer.Elapsed;
@@ -972,6 +1001,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             _pngExportInProgress = false;
             UpdateCellEditButtons();
             HideProgressStatus();
+            if (path is not null) await _platformServices.ReleaseTemporaryFileAsync(path);
         }
     }
 
@@ -1004,6 +1034,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
 
     private void UpdateCellEditButtons()
     {
+        UpdateSequencePlaybackButton();
         if (_sheetResizeButton is not null)
         {
             _sheetResizeButton.Content = _project.HasSheetResize ? "サイズ変更解除" : "全体サイズ変更";
@@ -1069,7 +1100,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         try
         {
             var reset = cells.Any(cell => cell.HasColorAdjustment);
-            (float Hue, float Saturation, float Brightness, float Contrast) values = default;
+            (float Hue, float Saturation, float Brightness, float Contrast, ColorInversion Inversions) values = default;
             if (!reset)
             {
                 SetProgressStatus("選択セルのプレビューを生成中...", isIndeterminate: true);
@@ -1082,7 +1113,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             }
             EnsureImportProjectUnchanged(revision);
             foreach (var cell in cells)
-                (cell.Hue, cell.Saturation, cell.Brightness, cell.Contrast) = values;
+                (cell.Hue, cell.Saturation, cell.Brightness, cell.Contrast, cell.ColorInversions) = values;
             ProjectValidator.Validate(next);
             PushUndo(); _project = next;
             MarkDirty(); RefreshAll();
@@ -1488,6 +1519,8 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         _loadingImportTarget = target;
         var previousStatus = _status.Text ?? string.Empty;
         var revisionAtStart = _projectRevision;
+        var importTitle = _project.Columns == 1 && _project.Rows == 1 && _project.Cells.Count == 0 && _project.Title == "SAMERIDER"
+            ? Path.GetFileNameWithoutExtension(_platformServices.GetDisplayName(sourcePath)) : null;
         ImportedSprite? copiedImport = null;
         ImportedSpriteSequence? copiedGifImport = null;
         string? copiedIntoDirectory = null;
@@ -1506,6 +1539,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
                 if (copiedGifImport is null) return;
                 EnsureImportProjectUnchanged(revisionAtStart);
                 PushUndo();
+                ApplyInitialImportTitle(importTitle);
                 _project.CellWidth = copiedGifImport.Assets[0].Width;
                 _project.CellHeight = copiedGifImport.Assets[0].Height;
                 _project.Assets.AddRange(copiedGifImport.Assets);
@@ -1544,22 +1578,8 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
                 using var previewBitmap = preview.Bitmap;
                 using var sampleImage = CreateBitmap(previewBitmap);
                 loadTimer.Stop();
-                var initialCellWidth = imageWidth;
-                var initialCellHeight = imageHeight;
-                while (initialCellHeight != 0)
-                {
-                    var remainder = initialCellWidth % initialCellHeight;
-                    initialCellWidth = initialCellHeight;
-                    initialCellHeight = remainder;
-                }
-                initialCellHeight = initialCellWidth;
-                if ((long)(imageWidth / initialCellWidth) * (imageHeight / initialCellWidth) > ProjectValidator.MaximumGridCellCount)
-                {
-                    initialCellWidth = imageWidth;
-                    initialCellHeight = imageHeight;
-                }
                 var initialSize = await Dialogs.PickTrimmedImportCellSizeAsync(
-                    this, imageWidth, imageHeight, initialCellWidth, initialCellHeight, sampleImage);
+                    this, imageWidth, imageHeight, cellWidth, cellHeight, sampleImage);
                 loadTimer.Start();
                 if (initialSize is null) { SetStatus(previousStatus); return; }
                 EnsureImportProjectUnchanged(revisionAtStart);
@@ -1637,6 +1657,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
 
             EnsureImportProjectUnchanged(revisionAtStart);
             PushUndo();
+            ApplyInitialImportTitle(importTitle);
             _project.CellWidth = cellWidth;
             _project.CellHeight = cellHeight;
             _project.Assets.Add(new SpriteAsset { RelativePath = copiedImport.AssetPath, Width = copiedImport.Width, Height = copiedImport.Height });
@@ -1683,6 +1704,15 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             UpdateCellEditButtons();
             HideProgressStatus();
         }
+    }
+
+    private void ApplyInitialImportTitle(string? title)
+    {
+        if (title is null || !ProjectValidator.IsSafeFileName(title)) return;
+        // Keep the existing import folder: source paths and Undo still refer to it.
+        var importFolderName = _project.ImportFolderName;
+        _project.Title = title;
+        _project.ImportFolderName = importFolderName;
     }
 
     private async Task<ImportedSpriteSequence?> PrepareGifImportAsync(string sourcePath, int x, int y, int revisionAtStart, string previousStatus)
@@ -1962,7 +1992,6 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         else if (useControl)
         {
             if (!_selectedCells.Add((x, y))) _selectedCells.Remove((x, y));
-            if (_selectedCells.Count == 0) _selectedCells.Add((x, y));
             _selectionAnchor = (x, y);
         }
         else
@@ -2148,35 +2177,99 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             openLocation.Click += async (_, _) => await OpenSelectedCellAssetLocationsAsync(selectedPositions);
         var insertRight = new MenuItem
         {
-            Header = "空白セルを挿入（右にずらす）",
+            Header = "右にずらす",
             IsEnabled = hasCellsToShiftRight && canInsertRight
         };
         insertRight.Click += (_, _) => TransformSelectedLines(selectedPositions, horizontal: true, insert: true);
         var insertDown = new MenuItem
         {
-            Header = "空白セルを挿入（下にずらす）",
+            Header = "下にずらす",
             IsEnabled = hasCellsToShiftDown && canInsertDown
         };
         insertDown.Click += (_, _) => TransformSelectedLines(selectedPositions, horizontal: false, insert: true);
         var clearCell = new MenuItem { Header = "セルを空にする", IsEnabled = selectedCells.Length > 0 };
         clearCell.Click += async (_, _) => await DeleteCellsAtPositionsAsync(selectedPositions);
-        var shiftLeft = new MenuItem { Header = "セルを削除（左に詰める）", IsEnabled = CanTransformSelectedLines(selectedPositions, horizontal: true, insert: false) };
+        var shiftLeft = new MenuItem { Header = "左に詰める", IsEnabled = CanTransformSelectedLines(selectedPositions, horizontal: true, insert: false) };
         shiftLeft.Click += (_, _) => TransformSelectedLines(selectedPositions, horizontal: true, insert: false);
-        var shiftUp = new MenuItem { Header = "セルを削除（上に詰める）", IsEnabled = CanTransformSelectedLines(selectedPositions, horizontal: false, insert: false) };
+        var shiftUp = new MenuItem { Header = "上にずらす", IsEnabled = CanTransformSelectedLines(selectedPositions, horizontal: false, insert: false) };
         shiftUp.Click += (_, _) => TransformSelectedLines(selectedPositions, horizontal: false, insert: false);
         var fillCell = new MenuItem { Header = "セルを塗り潰す" };
         fillCell.Click += async (_, _) => await FillCellsAsync(selectedPositions);
+        AddCellContextHeader(menu, x, y);
         menu.Items.Add(copy);
         menu.Items.Add(paste);
         menu.Items.Add(new Separator());
         if (_platformServices.CanOpenAssetLocation) menu.Items.Add(openLocation);
-        menu.Items.Add(insertRight);
-        menu.Items.Add(insertDown);
+        var insertMenu = new MenuItem { Header = "空白セルを挿入" };
+        insertMenu.Items.Add(insertRight);
+        var insertWrap = new MenuItem { Header = "右にずらして折り返す", IsEnabled = CellFlowService.CanTransform(_project, selectedPositions, true) };
+        insertWrap.Click += (_, _) => TransformSelectedFlow(selectedPositions, true);
+        insertMenu.Items.Add(insertWrap);
+        insertMenu.Items.Add(insertDown);
+        menu.Items.Add(insertMenu);
         menu.Items.Add(clearCell);
-        menu.Items.Add(shiftLeft);
-        menu.Items.Add(shiftUp);
+        var deleteMenu = new MenuItem { Header = "セルを削除" };
+        deleteMenu.Items.Add(shiftLeft);
+        var deleteWrap = new MenuItem { Header = "左に詰めて折り返す", IsEnabled = CellFlowService.CanTransform(_project, selectedPositions, false) };
+        deleteWrap.Click += (_, _) => TransformSelectedFlow(selectedPositions, false);
+        deleteMenu.Items.Add(deleteWrap);
+        deleteMenu.Items.Add(shiftUp);
+        menu.Items.Add(deleteMenu);
         menu.Items.Add(fillCell);
         menu.Open(visual.Frame);
+    }
+
+    private void AddCellContextHeader(ContextMenu menu, int x, int y)
+    {
+        var cell = FindCell(x, y);
+        if (cell is null) return;
+        var name = new TextBlock
+        {
+            Text = cell.DisplayName, MaxWidth = 440, TextWrapping = TextWrapping.Wrap,
+            TextTrimming = TextTrimming.None, FontSize = 13
+        };
+        var header = new StackPanel { Spacing = 8, MaxWidth = 440 };
+        header.Children.Add(name);
+        menu.Items.Add(new MenuItem { Header = header, StaysOpenOnClick = true });
+        menu.Items.Add(new Separator());
+        if (!CellSequenceService.TryGetNeighbor(_project, cell, -1, out _) &&
+            !CellSequenceService.TryGetNeighbor(_project, cell, 1, out _)) return;
+
+        var previous = new Button { Content = "←", Width = 52, HorizontalContentAlignment = HorizontalAlignment.Center };
+        var next = new Button { Content = "→", Width = 52, HorizontalContentAlignment = HorizontalAlignment.Center };
+        EditorToolTip.SetTip(previous, "このセルを前の連番画像に差し替える");
+        EditorToolTip.SetTip(next, "このセルを次の連番画像に差し替える");
+        var controls = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        controls.Children.Add(previous);
+        controls.Children.Add(next);
+        header.Children.Add(controls);
+        void UpdateButtons()
+        {
+            var current = FindCell(x, y);
+            name.Text = current?.DisplayName ?? string.Empty;
+            previous.IsEnabled = current is not null && CellSequenceService.TryGetNeighbor(_project, current, -1, out _);
+            next.IsEnabled = current is not null && CellSequenceService.TryGetNeighbor(_project, current, 1, out _);
+            previous.Opacity = previous.IsEnabled ? 1 : 0.4;
+            next.Opacity = next.IsEnabled ? 1 : 0.4;
+        }
+        void ReplaceFrame(int direction)
+        {
+            if (_imageImportInProgress || _pngExportInProgress || _cellEditInProgress) return;
+            var current = FindCell(x, y);
+            if (current is null || !CellSequenceService.TryGetNeighbor(_project, current, direction, out var frame) || frame is null) return;
+            PushUndo();
+            current.AssetPath = frame.AssetPath;
+            current.SourceRect = frame.SourceRect;
+            current.DisplayName = frame.DisplayName;
+            MarkDirty();
+            RefreshCellVisual((x, y));
+            RefreshPreview();
+            UpdateButtons();
+            SetStatus($"連番画像を差し替えました: {current.DisplayName}");
+        }
+        previous.Click += (_, e) => { e.Handled = true; ReplaceFrame(-1); };
+        next.Click += (_, e) => { e.Handled = true; ReplaceFrame(1); };
+        UpdateButtons();
     }
 
     private void CopySelectedCells()
@@ -2193,6 +2286,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
             OffsetX = cell.OffsetX,
             OffsetY = cell.OffsetY,
             Hue = cell.Hue, Saturation = cell.Saturation, Brightness = cell.Brightness, Contrast = cell.Contrast,
+            ColorInversions = cell.ColorInversions,
             DisplayName = cell.DisplayName
         }).ToArray();
         SetStatus($"{cells.Length}セルをコピーしました。");
@@ -2255,6 +2349,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
                 OffsetX = cell.OffsetX,
                 OffsetY = cell.OffsetY,
                 Hue = cell.Hue, Saturation = cell.Saturation, Brightness = cell.Brightness, Contrast = cell.Contrast,
+                ColorInversions = cell.ColorInversions,
                 DisplayName = cell.DisplayName
             });
         }
@@ -2346,6 +2441,16 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         var operation = insert ? "空白を挿入してずらしました" : "選択位置を削除して詰めました";
         var axis = horizontal ? "行" : "列";
         SetStatus($"選択された{axis}のセルを{operation}。{(expandsGrid ? "シートのサイズを拡張しました。" : string.Empty)}");
+    }
+
+    private void TransformSelectedFlow(IReadOnlySet<(int X, int Y)> positions, bool insert)
+    {
+        if (!CellFlowService.CanTransform(_project, positions, insert)) return;
+        var next = CellFlowService.CreateTransformed(_project, positions, insert);
+        PushUndo();
+        _project = next;
+        MarkDirty(); SyncFields(); RefreshAll();
+        SetStatus(insert ? "空白セルを挿入し、右にずらして折り返しました。" : "セルを削除し、左に詰めて折り返しました。");
     }
 
     private async Task FillCellsAsync(IReadOnlySet<(int X, int Y)> positions)
@@ -2773,6 +2878,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
 
     private void RefreshPreview()
     {
+        StopSequencePlayback();
         UpdateCellEditButtons();
         _updatePreviewViewport?.Invoke();
         UpdatePngExportButtonState();
@@ -2788,6 +2894,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
 
     private void RefreshCurrentPreview()
     {
+        StopSequencePlayback();
         _previewCrosshairPinned = false;
         _previewCrosshairOverlay.IsVisible = false;
         var current = FindCell(_selectedX, _selectedY);
@@ -2914,7 +3021,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
     private OverlayCellCacheKey CreateOverlayCellCacheKey(SpriteCell cell, SKColor tint) => new(
         cell.X, cell.Y, cell.AssetPath,
         cell.SourceRect.X, cell.SourceRect.Y, cell.SourceRect.Width, cell.SourceRect.Height,
-        cell.OffsetX, cell.OffsetY, cell.Hue, cell.Saturation, cell.Brightness, cell.Contrast,
+        cell.OffsetX, cell.OffsetY, cell.Hue, cell.Saturation, cell.Brightness, cell.Contrast, cell.ColorInversions,
         // Cell size changes alter the thumbnail dimensions even when the cell
         // metadata itself remains unchanged.
         _project.CellWidth, _project.CellHeight,
@@ -2922,6 +3029,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
 
     private void HandlePreviewPointerPressed(Border previewFrame, Grid previewLayers, PointerPressedEventArgs e)
     {
+        if (_sequencePlaybackCancellation is not null) return;
         if (!e.GetCurrentPoint(previewFrame).Properties.IsLeftButtonPressed) return;
         var pointer = e.GetPosition(previewLayers);
         if (_previewCrosshairPinned)
@@ -3010,6 +3118,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
 
     private void HandlePreviewPointerMoved(Grid previewLayers, Point pointer)
     {
+        if (_sequencePlaybackCancellation is not null) return;
         if (_previewCrosshairPinned)
         {
             var imageBounds = GetPreviewImageBounds(previewLayers);
@@ -3134,6 +3243,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
 
     private void ClearSourceCache()
     {
+        StopSequencePlayback();
         foreach (var bitmap in _sourceBitmaps.Values) bitmap.Bitmap.Dispose();
         _sourceBitmaps.Clear();
         foreach (var cached in _selectedOverlayCells.Values) cached.Bitmap.Dispose();
@@ -3239,7 +3349,6 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         _selectedX = Math.Clamp(_selectedX, 0, _project.Columns - 1);
         _selectedY = Math.Clamp(_selectedY, 0, _project.Rows - 1);
         _selectedCells.RemoveWhere(position => position.X < 0 || position.X >= _project.Columns || position.Y < 0 || position.Y >= _project.Rows);
-        if (_selectedCells.Count == 0) _selectedCells.Add((_selectedX, _selectedY));
         _selectionAnchor = (Math.Clamp(_selectionAnchor.X, 0, _project.Columns - 1), Math.Clamp(_selectionAnchor.Y, 0, _project.Rows - 1));
     }
 
@@ -3336,7 +3445,6 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         }
 
         _selectedCells.Clear();
-        _selectedCells.Add((_selectedX, _selectedY));
         _selectionAnchor = (_selectedX, _selectedY);
         ResetOffsetBatch();
         UpdateSelectionVisuals();
@@ -3376,7 +3484,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
 
     private async Task DeleteSelectedCellsAsync()
     {
-        HashSet<(int X, int Y)> positions = _selectedCells.Count > 0 ? _selectedCells.ToHashSet() : [(_selectedX, _selectedY)];
+        var positions = _selectedCells.ToHashSet();
         await DeleteCellsAtPositionsAsync(positions);
     }
 
@@ -3438,7 +3546,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
         }
     }
     private void ResetOffsetBatch() { _lastOffsetKey = null; }
-    private void MarkDirty() { _projectRevision++; _dirty = true; UpdateTitleBar(); }
+    private void MarkDirty() { StopSequencePlayback(); _projectRevision++; _dirty = true; UpdateTitleBar(); }
     private string GetApplicationDirectory() => _platformServices.WorkspaceDirectory;
 
     private void UpdateTitleBar()
@@ -3571,7 +3679,7 @@ public sealed class EditorView : UserControl, IEditorDialogPresenter
     private readonly record struct OverlayCellCacheKey(
         int X, int Y, string AssetPath,
         int SourceX, int SourceY, int SourceWidth, int SourceHeight,
-        int OffsetX, int OffsetY, float Hue, float Saturation, float Brightness, float Contrast,
+        int OffsetX, int OffsetY, float Hue, float Saturation, float Brightness, float Contrast, ColorInversion Inversions,
         int CellWidth, int CellHeight,
         byte TintRed, byte TintGreen, byte TintBlue);
 

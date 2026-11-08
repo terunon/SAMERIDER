@@ -5,6 +5,34 @@ namespace SAMERIDER.Core.Services;
 
 public static class CellEditService
 {
+    private static readonly Lazy<SKRuntimeEffect> SaturationInversionRuntimeEffect = new(() =>
+    {
+        const string source = """
+            half4 main(half4 color)
+            {
+                float alpha = color.a;
+                if (alpha <= 0.00001) return half4(0);
+                float3 rgb = clamp(float3(color.rgb) / alpha, 0.0, 1.0);
+                float maximum = max(rgb.r, max(rgb.g, rgb.b));
+                float minimum = min(rgb.r, min(rgb.g, rgb.b));
+                float lightness = (maximum + minimum) * 0.5;
+                float chroma = maximum - minimum;
+                float capacity = 1.0 - abs(2.0 * lightness - 1.0);
+                float reflectedChroma = max(0.0, capacity - chroma);
+                float3 reflected;
+                if (chroma > 0.00001)
+                    reflected = lightness + (rgb - lightness) * (reflectedChroma / chroma);
+                else
+                    reflected = float3(lightness + reflectedChroma * 0.5,
+                                       lightness - reflectedChroma * 0.5,
+                                       lightness - reflectedChroma * 0.5);
+                return half4(clamp(reflected, 0.0, 1.0) * alpha, alpha);
+            }
+            """;
+        var effect = SKRuntimeEffect.CreateColorFilter(source, out var errors);
+        return effect ?? throw new InvalidOperationException($"彩度反転シェーダーを作成できません: {errors}");
+    });
+
     public static bool CanRestoreSize(SpriteProject project, int columns, int rows)
     {
         if (!project.HasSheetResize) return true;
@@ -50,8 +78,20 @@ public static class CellEditService
         return Math.Max(step, checked((int)Math.Round((double)value / step, MidpointRounding.AwayFromZero) * step));
     }
 
-    public static SKColorFilter CreateColorFilter(float hue, float saturation, float brightness, float contrast)
+    public static SKColorFilter CreateColorFilter(float hue, float saturation, float brightness, float contrast,
+        ColorInversion inversions = ColorInversion.None)
     {
+        ValidateInversions(inversions);
+        if (inversions.HasFlag(ColorInversion.Saturation))
+        {
+            using var beforeSaturationInversion = CreateColorFilter(hue, saturation, 0, 0, inversions & ColorInversion.Hue);
+            using var saturationInversion = SaturationInversionRuntimeEffect.Value.ToColorFilter();
+            using var afterSaturationInversion = CreateColorFilter(0, 0, brightness, contrast,
+                inversions & (ColorInversion.Brightness | ColorInversion.Contrast));
+            using var beforeAndInversion = SKColorFilter.CreateCompose(saturationInversion, beforeSaturationInversion);
+            return SKColorFilter.CreateCompose(afterSaturationInversion, beforeAndInversion);
+        }
+        if (inversions.HasFlag(ColorInversion.Hue)) hue += 180;
         var radians = hue * MathF.PI / 180;
         var c = MathF.Cos(radians);
         var s = MathF.Sin(radians);
@@ -62,7 +102,7 @@ public static class CellEditService
             .213f - c * .213f - s * .787f, .715f - c * .715f + s * .715f, .072f + c * .928f + s * .072f
         ];
         var saturationScale = 1 + saturation / 100;
-        var contrastScale = 1 + contrast / 100;
+        var contrastScale = (1 + contrast / 100) * (inversions.HasFlag(ColorInversion.Contrast) ? -1 : 1);
         float[] luminance = [.213f, .715f, .072f];
         var matrix = new float[20];
         for (var row = 0; row < 3; row++)
@@ -73,19 +113,36 @@ public static class CellEditService
                         ((1 - saturationScale) * luminance[inner] + (row == inner ? saturationScale : 0)) * rotation[inner * 3 + column];
             matrix[row * 5 + 4] = brightness / 100 + (1 - contrastScale) * 0.5f;
         }
+        if (inversions.HasFlag(ColorInversion.Brightness))
+        {
+            for (var row = 0; row < 3; row++)
+            {
+                for (var column = 0; column < 3; column++)
+                    matrix[row * 5 + column] *= -1;
+                matrix[row * 5 + 4] = 1 - matrix[row * 5 + 4];
+            }
+        }
         matrix[18] = 1;
         return SKColorFilter.CreateColorMatrix(matrix);
     }
 
-    public static SKBitmap AdjustColors(SKBitmap source, float hue, float saturation, float brightness, float contrast)
+    public static SKBitmap AdjustColors(SKBitmap source, float hue, float saturation, float brightness, float contrast,
+        ColorInversion inversions = ColorInversion.None)
     {
+        ValidateInversions(inversions);
         var output = new SKBitmap(source.Width, source.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
         using var canvas = new SKCanvas(output);
         canvas.Clear(SKColors.Transparent);
-        using var filter = CreateColorFilter(hue, saturation, brightness, contrast);
+        using var filter = CreateColorFilter(hue, saturation, brightness, contrast, inversions);
         using var paint = new SKPaint { ColorFilter = filter };
         canvas.DrawBitmap(source, 0, 0, paint);
         return output;
+    }
+
+    private static void ValidateInversions(ColorInversion inversions)
+    {
+        if ((inversions & ~ColorInversion.All) != 0)
+            throw new ArgumentOutOfRangeException(nameof(inversions), inversions, "色反転フラグに未対応の値が含まれています。");
     }
 
     // Decode each source once, and render directly into a bounded preview instead of exporting a full-resolution sheet.

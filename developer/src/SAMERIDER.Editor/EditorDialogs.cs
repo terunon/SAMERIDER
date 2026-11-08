@@ -58,7 +58,7 @@ internal static class Dialogs
             content.Children.Add(previewBorder);
             content.Children.Add(new TextBlock
             {
-                Text = "配置順は左上から右へ、行末から次の行へ進みます。空きセルはそのまま残ります。",
+                Text = "一方を入力するともう一方を自動計算します。",
                 TextWrapping = TextWrapping.Wrap, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(8, 2)
             });
             content.Children.Add(buttons);
@@ -92,13 +92,43 @@ internal static class Dialogs
                     }
                 }
                 ok.IsEnabled = valid;
+                validation.IsVisible = !valid;
                 validation.Text = valid
-                    ? $"配置セル数: {columns * (long)rows}（フレームが収まります）"
+                    ? string.Empty
                     : $"列・行を1以上で指定し、合計を{frameCount}〜{ProjectValidator.MaximumGridCellCount}セルにしてください。";
                 validation.Foreground = valid ? Brushes.LightGreen : Brushes.Orange;
             }
-            columnsInput.TextChanged += (_, _) => ValidateGrid();
-            rowsInput.TextChanged += (_, _) => ValidateGrid();
+            var updatingGrid = false;
+            void UpdateGrid(bool columnsChanged)
+            {
+                if (updatingGrid) return;
+                var input = columnsChanged ? columnsInput : rowsInput;
+                if (!int.TryParse(input.Text, out var count) || count <= 0)
+                {
+                    ValidateGrid();
+                    return;
+                }
+                updatingGrid = true;
+                try
+                {
+                    count = Math.Min(count, frameCount);
+                    var columns = columnsChanged ? count : (frameCount - 1) / count + 1;
+                    // Rows are always the number actually occupied in row-major order.
+                    var rows = (frameCount - 1) / columns + 1;
+                    if (columnsInput.Text != columns.ToString()) columnsInput.Text = columns.ToString();
+                    if (rowsInput.Text != rows.ToString()) rowsInput.Text = rows.ToString();
+                }
+                finally { updatingGrid = false; }
+                ValidateGrid();
+            }
+            columnsInput.PropertyChanged += (_, args) =>
+            {
+                if (args.Property == TextBox.TextProperty) UpdateGrid(columnsChanged: true);
+            };
+            rowsInput.PropertyChanged += (_, args) =>
+            {
+                if (args.Property == TextBox.TextProperty) UpdateGrid(columnsChanged: false);
+            };
             ok.Click += (_, _) =>
             {
                 ValidateGrid();
@@ -107,7 +137,7 @@ internal static class Dialogs
                 window.Close();
             };
             cancel.Click += (_, _) => window.Close();
-            ValidateGrid();
+            UpdateGrid(columnsChanged: true);
             await window.ShowDialog(owner);
             return selected;
         }
@@ -123,7 +153,8 @@ internal static class Dialogs
         int cellWidth,
         int cellHeight,
         IReadOnlyCollection<(int X, int Y)> selectedPositions,
-        bool initialSelectedOnly)
+        bool initialSelectedOnly,
+        Func<bool, Task<string?>> exportUnityMeta)
     {
         int[] colorOptions = [4, 8, 16, 32, 64, 128, 256, 0];
         var window = new EditorDialogWindow
@@ -149,7 +180,8 @@ internal static class Dialogs
         var selectedOnlyCheckBox = new CheckBox
         {
             Content = "選択中セルだけを書き出す",
-            IsChecked = initialSelectedOnly,
+            IsChecked = initialSelectedOnly && selectedPositions.Count > 0,
+            IsEnabled = selectedPositions.Count > 0,
             HorizontalAlignment = HorizontalAlignment.Left,
             Margin = new Thickness(0, 2)
         };
@@ -222,6 +254,12 @@ internal static class Dialogs
         var previewStatus = new TextBlock { Text = "プレビューを生成しています…", Foreground = Brush.Parse("#A1A8B3"), HorizontalAlignment = HorizontalAlignment.Center };
         var ok = CenteredButton("OK", 100, isDefault: true);
         var cancel = CenteredButton("キャンセル", 110, isCancel: true);
+        var unityMeta = CenteredButton("Unity用.meta生成", 170);
+        EditorToolTip.SetTip(unityMeta, "現在のセル分割を記録した.metaだけを書き出します。このウィンドウは閉じません。PNGはOKから別途書き出してください。");
+        ok.PropertyChanged += (_, args) =>
+        {
+            if (args.Property == Button.IsEnabledProperty) unityMeta.IsEnabled = ok.IsEnabled;
+        };
         var buttons = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -231,6 +269,7 @@ internal static class Dialogs
         };
         buttons.Children.Add(ok);
         buttons.Children.Add(cancel);
+        buttons.Children.Add(unityMeta);
 
         var content = new Grid
         {
@@ -280,7 +319,7 @@ internal static class Dialogs
         window.Content = content;
 
         (int ColorCount, bool SelectedOnly, bool RemovePixelNoise, int AlphaThreshold, bool RemoveAdjacentCellBleed, int AdjacentCellBleedWidth)? selectedSettings = null;
-        ok.Click += (_, _) =>
+        void ConfirmSettings()
         {
             var removePixelNoise = removePixelNoiseCheckBox.IsChecked == true;
             if (!int.TryParse(alphaThresholdInput.Text, out var alphaThreshold) || alphaThreshold is < 0 or > 255)
@@ -304,9 +343,31 @@ internal static class Dialogs
                 }
                 adjacentCellBleedWidth = 2;
             }
-            selectedSettings = (colorOptions[(int)Math.Round(qualitySlider.Value)], selectedOnlyCheckBox.IsChecked == true,
+            selectedSettings = (colorOptions[(int)Math.Round(qualitySlider.Value)], selectedOnlyCheckBox.IsChecked == true && selectedPositions.Count > 0,
                 removePixelNoise, alphaThreshold, removeAdjacentCellBleed, adjacentCellBleedWidth);
             window.Close(true);
+        }
+        ok.Click += (_, _) => ConfirmSettings();
+        unityMeta.Click += async (_, _) =>
+        {
+            // Capture the current crop setting; metadata needs no pixel processing.
+            var selectedOnly = selectedOnlyCheckBox.IsChecked == true && selectedPositions.Count > 0;
+            buttons.IsEnabled = false;
+            try
+            {
+                var savedName = await exportUnityMeta(selectedOnly);
+                if (savedName is not null)
+                {
+                    previewStatus.Text = $".metaを書き出しました: {savedName}（PNGはOKから別途保存）";
+                    previewStatus.Foreground = Brushes.LightGreen;
+                }
+            }
+            catch (Exception ex)
+            {
+                previewStatus.Text = ".metaの書き出しに失敗しました: " + ex.Message;
+                previewStatus.Foreground = Brushes.Orange;
+            }
+            finally { buttons.IsEnabled = true; }
         };
         cancel.Click += (_, _) => window.Close(false);
 
@@ -326,7 +387,7 @@ internal static class Dialogs
             previewCancellation = cancellation;
             ok.IsEnabled = false;
             var colorCount = colorOptions[(int)Math.Round(qualitySlider.Value)];
-            var selectedOnly = selectedOnlyCheckBox.IsChecked == true;
+            var selectedOnly = selectedOnlyCheckBox.IsChecked == true && selectedPositions.Count > 0;
             var removePixelNoise = removePixelNoiseCheckBox.IsChecked == true;
             var removeAdjacentCellBleed = removeAdjacentCellBleedCheckBox.IsChecked == true;
             var hasValidAlphaThreshold = int.TryParse(alphaThresholdInput.Text, out var alphaThreshold) && alphaThreshold is >= 0 and <= 255;
@@ -1104,13 +1165,22 @@ internal static class Dialogs
         Control owner, int imageWidth, int imageHeight, int initialCellWidth, int initialCellHeight, Bitmap sampleImage,
         bool allowCellSizeChange = true)
     {
+        if (allowCellSizeChange)
+        {
+            // All editable import paths share the same source-image suggestion.
+            (initialCellWidth, initialCellHeight) = ImportCellSizeService.Suggest(imageWidth, imageHeight);
+        }
         var window = new EditorDialogWindow { Title = "画像のセルサイズを指定", Width = 600, SizeToContent = SizeToContent.Height, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner };
         var cellWidth = new TextBox { Text = initialCellWidth.ToString(), Width = 72, HorizontalContentAlignment = HorizontalAlignment.Center };
         var cellHeight = new TextBox { Text = initialCellHeight.ToString(), Width = 72, HorizontalContentAlignment = HorizontalAlignment.Center };
+        var columnsInput = new TextBox { Text = (imageWidth / Math.Max(1, initialCellWidth)).ToString(), Width = 64, HorizontalContentAlignment = HorizontalAlignment.Center };
+        var rowsInput = new TextBox { Text = (imageHeight / Math.Max(1, initialCellHeight)).ToString(), Width = 64, HorizontalContentAlignment = HorizontalAlignment.Center };
         if (!allowCellSizeChange)
         {
             cellWidth.IsReadOnly = true;
             cellHeight.IsReadOnly = true;
+            columnsInput.IsReadOnly = true;
+            rowsInput.IsReadOnly = true;
         }
         var calculation = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(16, 4, 16, 8) };
         const double previewMaximumWidth = 360;
@@ -1140,7 +1210,9 @@ internal static class Dialogs
             {
                 var columns = imageWidth / width;
                 var rows = imageHeight / height;
-                if (columns > 0 && rows > 0 && (long)columns * rows <= ProjectValidator.MaximumGridCellCount)
+                if (columns > 0 && rows > 0 && (long)columns * rows <= ProjectValidator.MaximumGridCellCount &&
+                    int.TryParse(columnsInput.Text, out var requestedColumns) && requestedColumns == columns &&
+                    int.TryParse(rowsInput.Text, out var requestedRows) && requestedRows == rows)
                 {
                     var lineStroke = Brush.Parse("#D9FDE68A");
                     for (var column = 1; column <= columns; column++)
@@ -1157,9 +1229,10 @@ internal static class Dialogs
                     var usedHeight = rows * (long)height;
                     var remainderWidth = imageWidth - usedWidth;
                     var remainderHeight = imageHeight - usedHeight;
-                    calculation.Text = $"セル数: {columns} × {rows}（セルサイズ: {width} × {height} px）";
-                    if (remainderWidth != 0 || remainderHeight != 0)
-                        calculation.Text += $"\n端数は右端 {remainderWidth}px・下端 {remainderHeight}px を切り捨てます。読み込み後はセルを選択し、方向キーで必要に応じて表示位置を調節してください。";
+                    calculation.IsVisible = remainderWidth != 0 || remainderHeight != 0;
+                    calculation.Text = calculation.IsVisible
+                        ? $"端数は右端 {remainderWidth}px・下端 {remainderHeight}px を切り捨てます。読み込み後はセルを選択し、方向キーで必要に応じて表示位置を調節してください。"
+                        : string.Empty;
                     calculation.Foreground = Brushes.White;
                     ok.IsEnabled = imageWidth <= 16_384 && imageHeight <= 16_384 &&
                         (long)imageWidth * imageHeight <= ProjectValidator.MaximumSheetPixelCount;
@@ -1167,13 +1240,45 @@ internal static class Dialogs
                 }
             }
 
-            calculation.Text = "画像内にセルが収まる正のサイズを指定してください（セル数上限を超えています）。";
+            calculation.IsVisible = true;
+            calculation.Text = "画像内に整数pxの等寸セルが収まるサイズ・分割数を指定してください（最大10,000セル）。";
             calculation.Foreground = Brushes.Orange;
             ok.IsEnabled = false;
         }
 
-        cellWidth.TextChanged += (_, _) => UpdateCalculation();
-        cellHeight.TextChanged += (_, _) => UpdateCalculation();
+        var updatingInputs = false;
+        void SynchronizeAxis(TextBox pixels, TextBox divisions, int imageSize, bool pixelsChanged)
+        {
+            if (updatingInputs) return;
+            updatingInputs = true;
+            try
+            {
+                var edited = pixelsChanged ? pixels : divisions;
+                if (int.TryParse(edited.Text, out var value) && value > 0)
+                {
+                    var other = pixelsChanged ? divisions : pixels;
+                    other.Text = (imageSize / value).ToString();
+                }
+            }
+            finally { updatingInputs = false; }
+            UpdateCalculation();
+        }
+        cellWidth.PropertyChanged += (_, args) =>
+        {
+            if (args.Property == TextBox.TextProperty) SynchronizeAxis(cellWidth, columnsInput, imageWidth, pixelsChanged: true);
+        };
+        cellHeight.PropertyChanged += (_, args) =>
+        {
+            if (args.Property == TextBox.TextProperty) SynchronizeAxis(cellHeight, rowsInput, imageHeight, pixelsChanged: true);
+        };
+        columnsInput.PropertyChanged += (_, args) =>
+        {
+            if (args.Property == TextBox.TextProperty) SynchronizeAxis(cellWidth, columnsInput, imageWidth, pixelsChanged: false);
+        };
+        rowsInput.PropertyChanged += (_, args) =>
+        {
+            if (args.Property == TextBox.TextProperty) SynchronizeAxis(cellHeight, rowsInput, imageHeight, pixelsChanged: false);
+        };
         ok.Click += (_, _) =>
         {
             if (!ok.IsEnabled || !int.TryParse(cellWidth.Text, out var width) || !int.TryParse(cellHeight.Text, out var height)) return;
@@ -1189,17 +1294,23 @@ internal static class Dialogs
         sizeInputs.Children.Add(new TextBlock { Text = "高さ", VerticalAlignment = VerticalAlignment.Center });
         sizeInputs.Children.Add(cellHeight);
         sizeInputs.Children.Add(new TextBlock { Text = "px", VerticalAlignment = VerticalAlignment.Center });
+        var splitInputs = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Spacing = 8, Margin = new Thickness(16, 4) };
+        splitInputs.Children.Add(new TextBlock { Text = "（横", VerticalAlignment = VerticalAlignment.Center });
+        splitInputs.Children.Add(columnsInput);
+        splitInputs.Children.Add(new TextBlock { Text = "× 縦", VerticalAlignment = VerticalAlignment.Center });
+        splitInputs.Children.Add(rowsInput);
+        splitInputs.Children.Add(new TextBlock { Text = "分割）", VerticalAlignment = VerticalAlignment.Center });
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Spacing = 8, Margin = new Thickness(12) };
         buttons.Children.Add(ok);
         buttons.Children.Add(cancel);
         var existingCellsNote = allowCellSizeChange ? string.Empty : "\n※既存セルがあるため、セルサイズは現在の設定に固定されています。";
         var header = new TextBlock
         {
-            Text = $"画像サイズ: {imageWidth} × {imageHeight} px\nセルサイズを指定してください。{existingCellsNote}",
+            Text = $"画像サイズ: {imageWidth} × {imageHeight} px\nセルサイズまたは分割数を指定してください。{existingCellsNote}",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(16, 16, 16, 6)
         };
-        window.Content = new StackPanel { Children = { header, previewFrame, sizeInputs, calculation, buttons } };
+        window.Content = new StackPanel { Children = { header, previewFrame, sizeInputs, splitInputs, calculation, buttons } };
         UpdateCalculation();
         var accepted = await window.ShowDialog<bool>(owner);
         return accepted ? selected : null;
