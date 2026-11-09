@@ -175,6 +175,9 @@ internal sealed class BrowserEditorPlatformServices : IEditorPlatformServices
             FileTypeChoices = [outputFileType]
         });
         if (file is null) return null;
+        if (extensions.Contains(".png", StringComparer.OrdinalIgnoreCase) &&
+            !ProjectValidator.IsSafePngOutputFileName(file.Name))
+            throw new InvalidDataException("PNGの出力ファイル名に使用できない文字または予約名が含まれています。");
         var path = Path.Combine(WorkspaceDirectory, "pending", Guid.NewGuid().ToString("N") + extension);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         _pendingOutputs.Add(path, file);
