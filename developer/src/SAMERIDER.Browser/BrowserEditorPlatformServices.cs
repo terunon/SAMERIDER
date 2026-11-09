@@ -175,9 +175,6 @@ internal sealed class BrowserEditorPlatformServices : IEditorPlatformServices
             FileTypeChoices = [outputFileType]
         });
         if (file is null) return null;
-        if (extensions.Contains(".png", StringComparer.OrdinalIgnoreCase) &&
-            !ProjectValidator.IsSafePngOutputFileName(file.Name))
-            throw new InvalidDataException("PNGの出力ファイル名には半角文字を使用してください。ファイル名に使えない記号や全角文字は使用できません。");
         var path = Path.Combine(WorkspaceDirectory, "pending", Guid.NewGuid().ToString("N") + extension);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         _pendingOutputs.Add(path, file);

@@ -24,7 +24,7 @@ public static class ProjectValidator
     }
 
     public static bool IsSafePngOutputFileName(string fileName) =>
-        IsSafeFileName(fileName) && fileName.All(character => character <= 0x7E);
+        IsSafeFileName(fileName);
 
     public static void Validate(SpriteProject project, string? projectDirectory = null)
     {
